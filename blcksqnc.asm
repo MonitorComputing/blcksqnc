@@ -1,25 +1,6 @@
 ;**********************************************************************
 ;                                                                     *
-;    Description:   Controller for occupation block with positional   *
-;                   train detector at exit.                           *
-;                   Receives value of signal aspect to be displayed   *
-;                   along with indication of previous signal giving   *
-;                   special speed indication and block reversed from  *
-;                   next (in advance) controller.                     *
-;                   Sends train detection state to next controller.   *
-;                   Receives train detection state from previous (in  *
-;                   rear) controller which it uses as entry detector  *
-;                   for occupation block.                             *
-;                   Sends value of signal aspect (increment of local  *
-;                   value of signal aspect) along with special speed  *
-;                   along with indication of local signal giving      *
-;                   special speed indication and block reversed to    *
-;                   previous controller.                              *
-;                   If no data is received from next controller link  *
-;                   input is treated as a level input indicating      *
-;                   to display a stop aspect or to cycle aspect from  *
-;                   stop to clear at fixed intervals after the        *
-;                   passing of a train.                               *
+;    Description:                                                     *
 ;                                                                     *
 ;    Author:        Chris White                                       *
 ;    Company:       Monitor Computing Services Ltd.                   *
@@ -64,13 +45,9 @@
 ;**********************************************************************
 
 
-;**********************************************************************
-; Include and configuration directives
-;**********************************************************************
+	list      p=16F84
 
-    list      p=16C84
-
-#include <p16C84.inc>
+#include <p16F84.inc>
 
 ; Configuration word
 ;  - Code Protection Off
@@ -84,11 +61,12 @@
 ; The lables following the directive are located in the respective .inc file.
 ; See respective data sheet for additional information on configuration word.
 
-; Include serial link interface macros
-#define CLKD_SERIAL
+
+;**********************************************************************
+; Include and configuration directives                                *
+;**********************************************************************
+
 #include <\dev\projects\utility\pic\asyn_srl.inc>
-#define CLKD_LINK
-#include <\dev\projects\utility\pic\link_hd.inc>
 
 
 ;**********************************************************************
@@ -422,7 +400,7 @@ SkipLinkN
 #define GOTUSERBANNER
 ; Select to run user code when booted
 #define MONUSERON
-#include <\dev\projects\monitor\pic\pic_mntr.inc>
+#include <\dev\projects\utility\pic\monitor.inc>
 
     ; Run interrupt scaling counter for second timing
     ;******************************************************************
