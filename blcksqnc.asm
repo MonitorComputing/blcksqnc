@@ -1,5 +1,3 @@
-; $Id$
-
 ;**********************************************************************
 ;                                                                     *
 ;    Description:   Controller for occupation block with positional   *
@@ -420,8 +418,11 @@ SkipLinkN
 
     movf    serPTimer,W     ; Get new serial timing counter value
 
-SkipLinkP
-    movwf   serPTimer       ; Update the timer
+; Select to display 'user' banner
+#define GOTUSERBANNER
+; Select to run user code when booted
+#define MONUSERON
+#include <\dev\projects\monitor\pic\pic_mntr.inc>
 
     ; Run interrupt scaling counter for second timing
     ;******************************************************************
@@ -520,16 +521,17 @@ Boot
     clrf    OPTION_REG
     bsf     OPTION_REG,PSA
 
-    BANKSEL TMR0
+		call    UserInit      ; Run user initialisation code
 
-    ; Initialise ports
-    ;******************************************************************
+		; Initialise interrupts
+		movlw   RTCCINT
+		movwf   TMR0          ; Initialise RTCC for timer interrupts
+		clrf    INTCON        ; Disable all interrupt sources
+		bsf	INTCON,T0IE       ; Enable RTCC interrupts
+		bsf	INTCON,GIE        ; Enable interrupts
 
-    movlw   PORTASTATUS     ; For Port A need to write one to each bit ...
-    movwf   PORTA           ; ... being used for input
 
-    bsf     EMTPORT,EMTBIT  ; Ensure detector emmitter is off
-    bsf     DETPORT,DETBIT  ; Ensure detector indicator is off
+		goto    MonitorMain       ; Run monitor program
 
     ; Initialise RAM to zero
     ;******************************************************************
