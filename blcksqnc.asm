@@ -9,10 +9,6 @@
 ;                   to determine section occupation and aspect to     *
 ;                   display.  Otherwise aspect to display is set by   *
 ;                   a fixed period timer once train has passed.       *
-;                   There is a second serial interface which can be   *
-;                   used to attach a terminal.  The aspect timing     *
-;                   value held in EEPROM can then be adjusted in the  *
-;                   field using the built in Monitor program.         *
 ;                                                                     *
 ;    Author:        Chris White                                       *
 ;    Company:       Monitor Computing Services Ltd.                   *
@@ -20,7 +16,7 @@
 ;                                                                     *
 ;**********************************************************************
 ;                                                                     *
-;    Copyright (C) 2010  Monitor Computing Services Ltd.              *
+;    Copyright (C) 2011  Monitor Computing Services Ltd.              *
 ;                                                                     *
 ;    This program is free software; you can redistribute it and/or    *
 ;    modify it under the terms of the GNU General Public License      *
@@ -65,6 +61,12 @@
 
 #include <p16F84.inc>
 
+; Configuration word
+;  - Code Protection Off
+;  - Watchdog timer disabled
+;  - Power up timer enabled
+;  - Crystal (resonator) oscillator
+
     __CONFIG   _CP_OFF & _WDT_OFF & _PWRTE_ON & _XT_OSC
 
 ; '__CONFIG' directive is used to embed configuration data within .asm file.
@@ -85,8 +87,8 @@ INTIND      EQU     1           ; Bit to indicate servicing interrupt
 USRIND      EQU     2           ; Bit to indicate servicing user main body code
 
 ; I/O port direction it masks
-PORTASTATUS EQU     B'11110001'
-PORTBSTATUS EQU     B'00001011'
+PORTASTATUS EQU     B'00000000'
+PORTBSTATUS EQU     B'00000011'
 
 ; Interrupt & timing constants
 RTCCINT     EQU     158         ; 10KHz = (1MHz / 100) - RTCC write inhibit (2)
@@ -110,22 +112,63 @@ TXPTRIS     EQU     TRISB       ; Tx port direction register
 TXPPORT     EQU     PORTB       ; Tx port data register
 TXPBIT      EQU     2           ; Tx output bit
 
-; Monitor interface constants
-RXMFLAG     EQU     4           ; Receive byte buffer 'loaded' status bit
-RXMERR      EQU     5           ; Receive error status bit
-RXMBREAK    EQU     6           ; Received 'break' status bit
-TXMFLAG     EQU     7           ; Transmit byte buffer 'clear' status bit
-TXMTRIS     EQU     TRISA       ; Tx port direction register
-TXMPORT     EQU     PORTA       ; Tx port data register
-TXMBIT      EQU     3           ; Tx output bit
-RXMTRIS     EQU     TRISA       ; Rx port direction register
-RXMPORT     EQU     PORTA       ; Rx port data register
-RXMBIT      EQU     4           ; Rx input bit
+; Timing constants
+INTMILLI        EQU     10 + 1      ; Interrupts per millisecond
+
+SECMILLILOW     EQU     0xE8        ; Milliseconds per second low byte
+SECMILLIHIGH    EQU     0x03        ; Milliseconds per second high byte
+
+NEXTTIMEOUT     EQU     100 + 1     ; 'next' signal link timeout (milliseconds)
+
+; Detector input constants
+DETPORT         EQU     PORTB       ; Detector input port
+DETIN           EQU     0           ; Detector input bit
+
+; Inhibit (force display of red aspect) input constants
+INHPORT         EQU     PORTB       ; Inhibit input port
+INHIN           EQU     1           ; Inhibit input bit
+
+INPHIGHWTR      EQU     200         ; Input debounce "On" threshold
+INPLOWWTR       EQU     55          ; Input debounce "Off" threshold
+
+; Signalling status constants
+BLKSTATE        EQU     B'00000011' ; Mask to isolate signal block state bits
+
+; State values, 'this' block
+BLOCKCLEAR      EQU     0           ; Block clear state value
+TRAINENTERING   EQU     1           ; Train entering block state value
+BLOCKOCCUPIED   EQU     2           ; Block occupied state value
+TRAINLEAVING    EQU     3           ; Train leaving block state value
+
+; State values, 'next' block
+NEXTSQNCING     EQU     0           ; Sequencing signal aspects state value
+NEXTAPPRCHING   EQU     1           ; Train approaching block state value
+NEXTENTERING    EQU     2           ; Train entering block state value
+NEXTOCCUPIED    EQU     3           ; Block occupied state value
+
+ASPSTATE        EQU     B'11000000' ; Aspect value mask
+ASPSTSWP        EQU     B'00001100' ; Swapped nibbles aspect value mask
+ASPINCR         EQU     B'01000000' ; Aspect value increment
+ASPGREEN        EQU     B'11000000' ; Green aspect value
+ASPDOUBLE       EQU     B'10000000' ; Double yellow aspect value mask
+
+INHBIT          EQU     3           ; Inhibit bit in status byte
+INHSTATE        EQU     B'00001000' ; Inhibit state bit mask
+
+DETBIT          EQU     4           ; Train detector bit in status byte
+DETSTATE        EQU     B'00010000' ; Train detector state bit mask
+
+; Aspect output constants
+ASPPORT         EQU     PORTB       ; Aspect output port
+REDOUT          EQU     7           ; Red aspect output bit
+YELLOWOUT       EQU     6           ; Yellow aspect output bit
+GREENOUT        EQU     5           ; Green aspect output bit
+DOUBLEOUT       EQU     4           ; Second yellow aspect output bit
 
     endm
 
 ;**********************************************************************
-; Variable register ns                                                *
+; Variable registers                                                  *
 ;**********************************************************************
 
             CBLOCK  0x0C
@@ -150,15 +193,50 @@ serPTxReg       ; Data shift register
 serPTxByt       ; Data byte buffer
 serPTxBitCnt    ; Bit down counter
 
-; Monitor interface
-serMRxTmr       ; Interrupt counter for serial bit timing
-serMRxReg       ; Data shift register
-serMRxByt       ; Data byte buffer
-serMRxBitCnt    ; Bit down counter
-serMTxTmr       ; Interrupt counter for serial bit timing
-serMTxReg       ; Data shift register
-serMTxByt       ; Data byte buffer
-serMTxBitCnt    ; Bit down counter
+milliCount      ; Interrupt counter for millisecond timing
+
+secCountLow     ; Millisecond counter (low byte) for second timing
+secCountHigh    ; Millisecond counter (high byte) for second timing
+
+detAcc          ; Detector input debounce accumulator
+inhAcc          ; Inhibit input debounce accumulator
+
+sigState        ; Signalling status (for this signal)
+                ;   bits 0,1 - Signal block state
+                ;     3 - Train leaving block
+                ;     2 - Block occupied
+                ;     1 - Train entering Block
+                ;     0 - Block Clear
+                ;   bit 2 - Unused
+                ;   bit 3 - Inhibit state
+                ;   bit 4 - Unused
+                ;   bit 5 - Detector state
+                ;   bits 6,7 - Aspect value
+                ;     3 - Green
+                ;     2 - Double Yellow
+                ;     1 - Yellow
+                ;     0 - Red
+
+nxtState        ; Signalling status received from 'next' signal
+                ;   bits 0,1 - Block simulation state
+                ;     3 - Block occupied
+                ;     2 - Train entering Block
+                ;     1 - Train approaching Block
+                ;     0 - Sequencing signal aspects
+                ;   bit 2 - Unused
+                ;   bit 3 - Unused
+                ;   bit 4 - Unused
+                ;   bit 5 - Detector state
+                ;   bits 6,7 - Aspect value
+                ;     3 - Green
+                ;     2 - Double Yellow
+                ;     1 - Yellow
+                ;     0 - Red
+
+aspectTime      ; Aspect interval for simulating 'next' signal
+nxtTimer        ; Second counter for simulating 'next' signal
+nxtLnkTmr       ; Millisecond counter for timing out 'next' signal link
+telemData       ; Data received from 'next' or sent to 'previous' signal
 
             ENDC
 
@@ -198,88 +276,73 @@ IntVector
     movwf   status_isr      ; save off contents of STATUS register
     movf    PCLATH,W        ; Move PCLATH register into W register
     movwf   pclath_isr      ; save off contents of PCLATH register
-    movlw   high BeginISR   ; Load ISR address high byte ...
-    movwf   PCLATH          ; ... into PCLATH to set code block
-    goto    BeginISR        ; Jump to interrupt service routine
-
-
-;**********************************************************************
-; Instance Monitor interface routine macros                           *
-;**********************************************************************
-
-EnableMRx   EnableRx  RXMTRIS, RXMPORT, RXMBIT
-    return
-
-BootVector
-    clrf    INTCON          ; Disable interrupts
-    clrf    INTCON          ; Ensure interrupts are disabled
-    goto    Boot            ; Jump to beginning of program
-
-InitMRx     InitRx  serMRxTmr, srlIfStat, RXMFLAG, RXMERR, RXMBREAK
-    return
-
-;**********************************************************************
-; Interrupt Service Routine
-;**********************************************************************
-
-SrvcMRx     ServiceRx serMRxTmr, RXMPORT, RXMBIT, serMRxBitCnt, INT5KINI, srlIfStat, RXMERR, RXMBREAK, serMRxReg, serMRxByt, RXMFLAG, INT5KBIT
-
-IntVector
-    movwf   w_isr           ; Save off current W register contents
-    swapf   STATUS,W        ; Swap status register into W register
-    BANKSEL TMR0            ; Ensure register page 0 is selected
-    movwf   status_isr      ; save off contents of STATUS register
-    movf    PCLATH,W        ; Move PCLATH register into W register
-    movwf   pclath_isr      ; save off contents of PCLATH register
     movlw   high IntVector  ; Load ISR address high byte ...
     movwf   PCLATH          ; ... into PCLATH to set code block
 
-EnableMTx   EnableTx  TXMTRIS, TXMPORT, TXMBIT
-    return
+    btfss   INTCON,T0IF     ; Test for RTCC Interrupt
+    goto    EndISR          ; If not, skip service routine
+
+    bsf     INDPORT,INTIND  ; Set interrupt service indicator output
 
     ; Re-enable the timer interrupt and reload the timer
     bcf     INTCON,T0IF     ; Reset the RTCC Interrupt bit
-    movlw   (RTCCINT - 2)   ; Allow 2 cycles for RTCC write inhibit
+    movlw   RTCCINT
     addwf   TMR0,F          ; Reload RTCC
 
-InitMTx     InitTx  serMTxTmr, srlIfStat, TXMFLAG
-    return
+    call    SrvcNRx         ; Perform 'next' signal interface Rx service
+    call    SrvcPTx         ; Perform 'previous' signal interface Tx service
 
-    decf    serNTimer,W     ; Decrement serial timing counter
-    btfss   STATUS,Z        ; Skip if zero ...
-    goto    SkipLinkN       ; ... else skip servicing the link
+    ; Run interrupt counter for millisecond timing
+    decfsz  milliCount,W    ; Decrement millisecond Interrupt counter into W
+    movwf   milliCount      ; If result is not zero update the counter
 
-SrvcMTx     ServiceTx serMTxTmr, srlIfStat, serMTxByt, serMTxReg, TXMFLAG, serMTxBitCnt, INT5KBIT, TXMPORT, TXMBIT, 0, 0
+    ; Debounce train detector input
 
-    movf    serNTimer,W     ; Get new serial timing counter value
+    btfss   DETPORT,DETIN   ; Skip if train detector input is set ...
+    goto    DecDetAcc       ; ... otherwise jump if not set
 
-LinkMRx
-SerMRx      SerialRx srlIfStat, RXMFLAG, serMRxByt
+    incfsz  detAcc,W        ; Increment train detector input accumulator into W
+    movwf   detAcc          ; If result is not zero update the accumulator
+    goto    DetDbncEnd   
 
-    ; Service previous controller link
-    ;******************************************************************
+DecDetAcc
+    decfsz  detAcc,W        ; Decrement train detector input accumulator into W
+    movwf   detAcc          ; If result is not zero update the accumulator
 
-LinkMTx
-SerMTx      SerialTx srlIfStat, TXMFLAG, serMTxByt
+DetDbncEnd
 
-    SrvcLink  lnkPState, lnkPTimer, serPTimer, INTLNKDLYRX, INTLNKDLYTX, INTLINKTMOP, EnableTxP, InitTxP, SrvcTxP, IsTxIdleP, TxBreakP, EnableRxP, InitRxP, SrvcRxP
+    ; Debounce inhibit input
 
-;**********************************************************************
-; Configure and include Monitor macros                                *
-;**********************************************************************
+    btfss   INHPORT,INHIN   ; Skip if inhibit input is set ...
+    goto    DecInhAcc       ; ... otherwise jump if not set
 
-; Set defines to configure Monitor macros
-#define GOTUSERBANNER   ; Display 'user' banner
-#define MONUSERON       ; Run user code immediately when booted
+    incfsz  inhAcc,W        ; Increment inhibit input accumulator into W
+    movwf   inhAcc          ; If result is not zero update the accumulator
+    goto    InhDbncEnd   
 
-; Include Monitor macros
-#include <\dev\projects\utility\pic\monitor.inc>
+DecInhAcc
+    decfsz  inhAcc,W        ; Decrement inhibit input accumulator into W
+    movwf   inhAcc          ; If result is not zero update the accumulator
+
+InhDbncEnd
+
+EndISR
+    movf    pclath_isr,W    ; Retrieve copy of PCLATH register
+    movwf   PCLATH          ; Restore pre-isr PCLATH register contents
+    swapf   status_isr,W    ; Swap copy of STATUS register into W register
+    movwf   STATUS          ; Restore pre-isr STATUS register contents
+    swapf   w_isr,F         ; Swap pre-isr W register value nibbles
+    swapf   w_isr,W         ; Swap pre-isr W register into W register
+
+    bcf     INDPORT,INTIND  ; Clear interrupt service indicator output
+
+    retfie                  ; return from Interrupt
 
     ; Run interrupt scaling counter for second timing
     ;******************************************************************
 
 ;**********************************************************************
-; Instance 'next' and 'previous' signal interface routine macros      *
+; Instance 'next' signal interface routine macros                     *
 ;**********************************************************************
 
 EnableNRx   EnableRx  RXNTRIS, RXNPORT, RXNBIT
@@ -309,6 +372,10 @@ SerNRx      SerialRx srlIfStat, RXNFLAG, serNRxByt
 EmitterOn
     bsf     EMTPORT,EMTBIT  ; Turn emitter off (active low)
 
+;**********************************************************************
+; Instance 'previous' signal interface routine macros                 *
+;**********************************************************************
+
 EnablePTx   EnableTx  TXPTRIS, TXPPORT, TXPBIT
     return
 
@@ -332,6 +399,8 @@ SerPTx      SerialTx srlIfStat, TXPFLAG, serPTxByt
 ;**********************************************************************
 ; Main program initialisation code
 ;**********************************************************************
+
+#include <\dev\projects\utility\pic\eeprom.inc>
 
 Boot
     ; Clear I/O ports
@@ -359,21 +428,44 @@ Boot
     ; Initialise 'next' and 'previous' signal serial link
     SerInit    srlIfStat, serPTxTmr, serPTxReg, serPTxByt, serPTxBitCnt, serNRxTmr, serNRxReg, serNRxByt, serNRxBitCnt
 
-    ; Initialise Monitor terminal serial link
-    SerInit    srlIfStat, serMTxTmr, serMTxReg, serMTxByt, serMTxBitCnt, serMRxTmr, serMRxReg, serMRxByt, serMRxBitCnt
-
     call    EnableNRx       ; Enable receive from 'next' signal
     call    InitNRx         ; Initialise receiver for 'next' signal
 
     call    EnablePTx       ; Enable transmit to 'previous' signal
     call    InitPTx         ; Initialise transmitter to 'previous' signal
 
-    call    EnableMRx       ; Enable receive from Monitor terminal
-    call    InitMRx         ; Initialise receiver for Monitor terminal
-    call    EnableMTx       ; Enable transmit to Monitor terminal
-    call    InitMTx         ; Initialise transmitter to Monitor terminal
+    ; Initialise input debounce accumulators
+    clrf    detAcc
+    incf    detAcc,F        ; Prevent rollover through zero if input is low
+    clrf    inhAcc
+    incf    inhAcc,F        ; Prevent rollover through zero if input is low
 
-    call    UserInit        ; Run user initialisation code
+    movlw   ASPGREEN
+    movwf   sigState        ; Initialise this signal to green aspect
+
+    clrf    nxtState        ; Initialise next signal to cycle to green aspect
+
+    ; Initialise timers
+
+    movlw   INTMILLI
+    movwf   milliCount      ; Initialise millisecond Interrupts counter
+
+    movlw   SECMILLILOW
+    movwf   secCountLow     ; Initialise one second milliseconds counter low
+    movlw   SECMILLIHIGH
+    movwf   secCountHigh    ; Initialise one second milliseconds counter high
+
+    movlw   low EEaspectTime
+    call    GetEEPROM
+    movwf   aspectTime      ; Initialise aspect interval for 'next' signal
+
+    clrf    nxtTimer        ; Initialise timer used to simulate 'next' signal
+    incf    nxtTimer,F
+
+    movlw   NEXTTIMEOUT     ; Initialise 'next' signal ...
+    movwf   nxtLnkTmr       ; ... link timeout
+
+    clrf    telemData       ; Clear serial link data store
 
     ; Initialise interrupts
     movlw   RTCCINT
@@ -382,303 +474,7 @@ Boot
     bsf     INTCON,T0IE     ; Enable RTCC interrupts
     bsf     INTCON,GIE      ; Enable interrupts
 
-
-    goto    MonitorMain     ; Run Monitor program
-
-    ; Initialise RAM to zero
-    ;******************************************************************
-
-    movlw   0x2F            ; Address of end of RAM
-    movwf   0x0C            ; Ensure first byte of RAM is non zero
-    movwf   FSR             ; Point indirect register to end of RAM
-
-BeginISR
-    btfss   INTCON,T0IF     ; Test for RTCC Interrupt
-    retfie                  ; If not, skip service routine
-
-    bsf     INDPORT,INTIND  ; Set interrupt service indicator output
-
-    ; Re-enable the timer interrupt and reload the timer
-    bcf     INTCON,T0IF     ; Reset the RTCC Interrupt bit
-    movlw   RTCCINT
-    addwf   TMR0,F          ; Reload RTCC
-
-    call    SrvcMRx         ; Perform Monitor interface Rx service
-    call    SrvcMTx         ; Perform Monitor interface Tx service
-    call    SrvcNRx         ; Perform 'next' signal interface Rx service
-    call    SrvcPTx         ; Perform 'previous' signal interface Tx service
-
-    ; Instance the Monitor interrupt service macro
-    MonitorISR
-
-EndISR
-    movf    pclath_isr,W    ; Retrieve copy of PCLATH register
-    movwf   PCLATH          ; Restore pre-isr PCLATH register contents
-    swapf   status_isr,W    ; Swap copy of STATUS register into W register
-    movwf   STATUS          ; Restore pre-isr STATUS register contents
-    swapf   w_isr,F         ; Swap pre-isr W register value nibbles
-    swapf   w_isr,W         ; Swap pre-isr W register into W register
-
-    bcf     INDPORT,INTIND  ; Clear interrupt service indicator output
-
-    retfie                  ; return from Interrupt
-
-    ; Perform timing operations
-    ;******************************************************************
-
-Timing
-    ; To keep the interrupt service routine as brief as possible timing is
-    ; performed by the interrupt service routing decrementing a counter until
-    ; it reaches 1.  Here in the main program loop (i.e. outside the interrupt
-    ; service routine) the count is tested and if found to be 1 it is reset
-    ; and the various timing operations are performed.
-
-; Timing constants
-INTMILLI        EQU     10 + 1      ; Interrupts per millisecond
-
-SECMILLILOW     EQU     0xE8        ; Milliseconds per second low byte
-SECMILLIHIGH    EQU     0x03        ; Milliseconds per second high byte
-
-NEXTTIMEOUT     EQU     100 + 1     ; 'next' signal link timeout (milliseconds)
-
-; Inhibit (force display of red aspect) input constants
-INHPORT         EQU     PORTB       ; Inhibit input port
-INHIN           EQU     1           ; Inhibit input bit
-
-; Detector input constants
-DETPORT         EQU     PORTB       ; Detector input port
-DETIN           EQU     0           ; Detector input bit
-
-INPHIGHWTR      EQU     200         ; Input debounce "On" threshold
-INPLOWWTR       EQU     55          ; Input debounce "Off" threshold
-
-; Signalling status constants
-BLKSTATE        EQU     B'00000011' ; Mask to isolate signal block state bits
-
-; State values, 'this' block
-BLOCKCLEAR      EQU     0           ; Block clear state value
-TRAINENTERING   EQU     1           ; Train entering block state value
-BLOCKOCCUPIED   EQU     2           ; Block occupied state value
-TRAINLEAVING    EQU     3           ; Train leaving block state value
-
-; State values, 'next' block
-NEXTSQNCING     EQU     0           ; Sequencing signal aspects state value
-NEXTAPPRCHING   EQU     1           ; Train approaching block state value
-NEXTENTERING    EQU     2           ; Train entering block state value
-NEXTOCCUPIED    EQU     3           ; Block occupied state value
-
-ASPSTATE        EQU     B'11000000' ; Aspect value mask
-ASPSTSWP        EQU     B'00001100' ; Swapped nibbles aspect value mask
-ASPINCR         EQU     B'01000000' ; Aspect value increment
-ASPGREEN        EQU     B'11000000' ; Green aspect value
-ASPDOUBLE       EQU     B'10000000' ; Double yellow aspect value mask
-
-INHBIT          EQU     4           ; Inhibit bit in status byte
-INHSTATE        EQU     B'00010000' ; Inhibit state bit mask
-
-DETBIT          EQU     5           ; Train detector bit in status byte
-DETSTATE        EQU     B'00100000' ; Train detector state bit mask
-
-; Aspect output constants
-ASPPORT         EQU     PORTB       ; Aspect output port
-DOUBLEOUT       EQU     4           ; Second yellow aspect output bit
-GREENOUT        EQU     5           ; Green aspect output bit
-YELLOWOUT       EQU     6           ; Yellow aspect output bit
-REDOUT          EQU     7           ; Red aspect output bit
-
-    ; Check status of train detector
-    ;******************************************************************
-
-    decf    snsAcc,W        ; Test detector correspondence accumulator
-    btfsc   STATUS,Z        ; Skip if above off threshold ...
-    bsf     DETPORT,DETBIT  ; ... else turn detector indicator off (active low)
-
-            CBLOCK
-
-milliCount      ; Interrupt counter for millisecond timing
-
-secCountLow     ; Millisecond counter (low byte) for second timing
-secCountHigh    ; Millisecond counter (high byte) for second timing
-
-detAcc          ; Detector input debounce accumulator
-inhAcc          ; Inhibit input debounce accumulator
-
-sigState        ; Signalling status (for this signal)
-                ;   bits 0,1 - Signal block state
-                ;     3 - Train leaving block
-                ;     2 - Block occupied
-                ;     1 - Train entering Block
-                ;     0 - Block Clear
-                ;   bit 4 - Inhibit state
-                ;   bit 5 - Detector state
-                ;   bits 6,7 - Aspect value
-                ;     3 - Green
-                ;     2 - Double Yellow
-                ;     1 - Yellow
-                ;     0 - Red
-
-nxtState        ; Signalling status received from 'next' signal
-                ;   bit 5 - Detector state
-                ;   bits 6,7 - Aspect value
-                ;     3 - Green
-                ;     2 - Double Yellow
-                ;     1 - Yellow
-                ;     0 - Red
-
-aspectTime      ; Aspect interval for simulating 'next' signal
-nxtTimer        ; Second counter for simulating 'next' signal
-nxtLnkTmr       ; Millisecond counter for timing out 'next' signal link
-telemData       ; Data received from 'next' or sent to 'previous' signal
-
-            ENDC
-
-    ; Only four bits of signalling status need to be sent so as a simple error
-    ; check these are sent in low nibble with ones complement in high nibble
-
-    movf    prvCntlr,W      ; Get status for previous controller
-
-UserBanner
-    movlw   crCode
-    call    TxLoop
-    movlw   lfCode
-    call    TxLoop
-    movlw   'M'
-    call    TxLoop
-    movlw   'A'
-    call    TxLoop
-    movlw   'S'
-    movlw   '4'
-    movlw   ' '
-    call    TxLoop
-    movlw   's'
-    call    TxLoop
-    movlw   'e'
-    call    TxLoop
-    movlw   'q'
-    call    TxLoop
-    movlw   'u'
-    call    TxLoop
-    movlw   'e'
-    call    TxLoop
-    movlw   'n'
-    call    TxLoop
-    movlw   'c'
-    call    TxLoop
-    movlw   'e'
-    call    TxLoop
-    movlw   'r'
-    call    TxLoop
-    movlw   ' ' 
-    call    TxLoop
-    movlw   '1'
-    call    TxLoop
-    movlw   'b'
-    call    TxLoop
-    movlw   crCode
-    call    TxLoop
-    movlw   lfCode
-
-TxLoop
-    movwf   FSR             ; Copy W to FSR, for sending
-LoopTx
-    call    LinkMTx         ; Try to send data
-    btfss   STATUS,Z        ; Skip if data sent ...
-    goto    LoopTx          ; ... otherwise keep trying to send
-
-    return
-
-    iorlw   0x0F            ; Set up for ones complement high nibble later
-
-    movwf   FSR             ; Save local signalling status
-    swapf   FSR,F           ; Swap nibbles, signalling status - low, 0xF - high
-
-UserInit
-    ; Initialise millisecond Interrupts counter
-    movlw   INTMILLI
-    movwf   milliCount
-
-    ; Initialise one second milliseconds counter
-    movlw   SECMILLILOW
-    movwf   secCountLow
-    movlw   SECMILLIHIGH
-    movwf   secCountHigh
-
-    ; Clear input debounce accumulators
-    clrf    detAcc
-    clrf    inhAcc
-
-    ; Initialise aspect values to show green
-    movlw   ASPGREEN
-    movwf   sigState
-    movwf   nxtState
-
-    ; Initialise timers
-    ;movlw   low EEaspectTime
-    ;call    GetEEPROM
-    movlw   7
-    movwf   aspectTime      ; Initialise aspect interval for 'next' signal
-    clrf    nxtTimer        ; Initialise timer used to simulate 'next' signal
-    incf    nxtTimer,F
-    movlw   NEXTTIMEOUT     ; Initialise 'next' signal ...
-    movwf   nxtLnkTmr       ; ... link timeout
-
-    clrf    telemData 
-
-    return
-
-    ; As a simple error check received data is ignored unless same value
-    ; received twice in succession
-
-    xorwf   telemPrv,F      ; Test against last received data
-    movwf   telemPrv        ; Replace last received data
-    btfss   STATUS,Z        ; Skip if last and just received data match ...
-    goto    PrevLinkEnd      ; ... else ignore just received data
-
-UserInt
-    ; Run interrupt counter for millisecond timing
-    decfsz  milliCount,W    ; Decrement millisecond Interrupt counter into W
-    movwf   milliCount      ; If result is not zero update the counter
-
-    ; Debounce train detector input
-
-    btfss   DETPORT,DETIN   ; Skip if train detector input is set ...
-    goto    DecDetAcc       ; ... otherwise jump if not set
-
-    incfsz  detAcc,W        ; Increment train detector input accumulator into W
-    movwf   detAcc          ; If result is not zero update the accumulator
-    goto    DetDbncEnd   
-
-DecDetAcc
-    decfsz  detAcc,W        ; Decrement train detector input accumulator into W
-    movwf   detAcc          ; If result is not zero update the accumulator
-
-    btfss   lnkNState,LNKDIRFLG ; Skip if replying to next controller ...
-    goto    CheckNextRx         ; ... else skip over next controller send
-
-    ; Debounce inhibit input
-
-    btfss   INHPORT,INHIN   ; Skip if inhibit input is set ...
-    goto    DecInhAcc       ; ... otherwise jump if not set
-
-    incfsz  inhAcc,W        ; Increment inhibit input accumulator into W
-    movwf   inhAcc          ; If result is not zero update the accumulator
-    goto    InhDbncEnd   
-
-DecInhAcc
-    decfsz  inhAcc,W        ; Decrement inhibit input accumulator into W
-    movwf   inhAcc          ; If result is not zero update the accumulator
-
-InhDbncEnd
-    return
-
-    andlw   0xF0            ; Isolate signalling status for ones complement
-    xorwf   FSR,F           ; Ones complement high and signalling status in low
-
-    call    LinkTxN         ; Send data to next controller
-    btfss   STATUS,Z        ; Skip if data sent ...
-    goto    NextLinkEnd     ; ... else continue trying to send
-
-UserMain    ; Top of main processing loop
+Main    ; Top of main processing loop
 
     bsf     INDPORT,USRIND  ; Set user process loop indicator output
 
@@ -1068,7 +864,6 @@ TrainLeaving
 
 BlockEnd    ; End of signal block state machine.
 
-
     ; Set aspect display output
 
     btfsc   sigState,INHBIT ; Skip if not a forced red aspect display ...
@@ -1119,7 +914,6 @@ RedAspect
 
 AspectEnd   ; End of aspect display output
 
-
     ; Send status to 'previous' signal
 
     ; Encode status
@@ -1146,7 +940,7 @@ AspectEnd   ; End of aspect display output
 
     bcf     INDPORT,USRIND  ; Clear user process loop indicator output
 
-    return  ; End of main processing loop
+    goto Main  ; End of main processing loop
 
 
 ;**********************************************************************
