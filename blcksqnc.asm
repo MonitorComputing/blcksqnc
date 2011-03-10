@@ -186,7 +186,10 @@ BLKSTATE       EQU  B'00000111' ; Mask to isolate block
 
 ; Aspect values
 ASPSTP      EQU     B'00000000' ; Stop aspect value
+ASPCL1      EQU     B'01000000'
+ASPCL2      EQU     B'10000000'
 ASPCLR      EQU     B'11000000' ; Clear aspect value
+ASPCLFLG    EQU     7           ; Clear aspect value flag bit
 ASPINCR     EQU     B'01000000' ; Aspect value increment
 ASPSTATE    EQU     B'11000000' ; Aspect value mask
 
@@ -208,6 +211,10 @@ EXTMSK      EQU     B'00100000' ; Exit detection state bit mask
 
 ; Aspect output constants
 ASPPORT     EQU     PORTB       ; Aspect output port
+STPMSK      EQU     B'10000000' ; Mask for red aspect output bit
+CL1MSK      EQU     B'01000000' ; Mask for yellow aspect output bit
+CL2MSK      EQU     B'00100000' ; Mask for double yellow aspect output bit
+CLRMSK      EQU     B'00010000' ; Mask for green aspect output bit
 ASPOUTMSK   EQU     B'11110000' ; Mask for aspect output bits
 
 INPACTV     EQU     7           ; Indicates debounce accumulator > high water
@@ -492,6 +499,17 @@ EndISR
 ; Subroutine to return aspect output mask in accumulator
 ;**********************************************************************
 GetAspectMask
+    movf    aspOut,W
+    btfsc   STATUS,Z
+    retlw   STPMSK
+
+    xorlw   ASPCLR
+    btfsc   STATUS,Z
+    retlw   CLRMSK
+
+    btfss   aspOut,ASPCLFLG
+    retlw   CL1MSK
+    retlw   CL2MSK
     return
 
 
