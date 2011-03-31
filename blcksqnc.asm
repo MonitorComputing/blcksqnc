@@ -117,7 +117,7 @@ PORTBSTATUS EQU     B'00001011'
 RTCCINT     EQU     160         ; 10KHz = ((4MHz / 4) / 100)
 
 ; Timing constants
-INTSCLNG    EQU     80 + 1      ; Interrupts scaling for seconds
+INTSCLNG    EQU     80 + 1      ; Interrupts scaling for seconds (gives 125Hz)
 SECSCLNG    EQU     125         ; Scaled interrupts per second
 HALFSEC     EQU     B'11000000' ; Roughly half second scaled interrupts mask
 
@@ -196,6 +196,9 @@ ASPSTATE    EQU     B'11000000' ; Aspect value mask
 ; Controller status flags
 ENTFLG      EQU     1           ; Entrance detection bit in status byte
 ENTMSK      EQU     B'00000010' ; Entrance detection state bit mask
+
+STRFLG      EQU     3           ; Exit detection stretched bit in status byte
+STRMSK      EQU     B'00001000' ; Exit detection stretched state bit mask
 
 REVFLG      EQU     3           ; Line reversed bit in status byte
 REVMSK      EQU     B'00001000' ; Line reversed state bit mask
@@ -324,13 +327,13 @@ lclCntlr        ; Status of this controller
                 ;     4 - Train spanning block
                 ;     5 - Train entering reverse
                 ;     6 - Train leaving reverse
-                ;   bit 3    - Unused
+                ;   bit 3    - Exit detection stretched
                 ;   bit 4    - Signal inhibit (display red aspect)
                 ;   bit 5    - Exit detection
                 ;   bits 6,7 - Aspect value
                 ;     0 - Stop
-                ;     1 - 
-                ;     2 - 
+                ;     1 - Clear1
+                ;     2 - Clear2
                 ;     3 - Clear
 
 nxtCntlr        ; Status received from next controller
@@ -610,7 +613,7 @@ Timing
     ; service routine) the count is tested and if found to be 1 it is reset
     ; and the various timing operations are performed.
 
-    ; Scale interrupts for to lower than 10KHz
+    ; Scale interrupts to lower than 10KHz
     ;******************************************************************
 
     decfsz  intScCount,W    ; Test interrupts scaling counter
@@ -653,7 +656,20 @@ Timing
     decfsz  nxtTimer,W      ; Decrement next signal simulation timer into W
     movwf   nxtTimer        ; If result is not zero update the timer
 
-    bsf     lnkNState,LNKDIRFLG ; Start replying to next controller
+    ; Check status of train detection input (active low) for off
+    ; (this is only done once a second so detection can be stretched to
+    ;  ignore any gaps between vehicles)
+    ;******************************************************************
+
+    btfss   inputs,DETBIT   ; Skip if detection input is off (active low) ...
+    goto    TimingEnd       ; ... else skip stretching of exit detection
+
+    btfsc   lclCntlr,STRFLG ; Skip if exit detection has not been stretched ...
+    bcf     lclCntlr,EXTFLG ; ... else set exit detection state to off
+
+    bsf     lclCntlr,STRFLG ; Set exit detection stretched flag
+
+TimingEnd
 
     ; Check status of train detector
     ;******************************************************************
@@ -663,15 +679,15 @@ Timing
     bsf     DETPORT,DETBIT  ; ... else turn detector indicator off (active low)
 
     btfsc   snsAcc,INPACTV  ; Skip if below on threshold ...
-    bcf     DETPORT,DETBIT  ; ... else turn detector indicator o (active low)
+    bcf     DETPORT,DETBIT  ; ... else turn detector indicator on (active low)
 
-    ; Check status of train detection input (active low)
+    ; Check status of train detection input (active low) for on
     ;******************************************************************
 
-    btfsc   inputs,DETBIT   ; Skip if detection input is on (active low) ...
-    bcf     lclCntlr,EXTFLG ; ... else set detection state to off
     btfss   inputs,DETBIT   ; Skip if detection input is off (active low) ...
-    bsf     lclCntlr,EXTFLG ; ... else set detection state to on
+    bsf     lclCntlr,EXTFLG ; ... else set exit detection state to on
+    btfss   inputs,DETBIT   ; Skip if detection input is off (active low) ...
+    bcf     lclCntlr,STRFLG ; ... else clear exit detection stretched flag
 
     ; Check status of special speed input (active low)
     ;******************************************************************
