@@ -55,10 +55,10 @@
 ;          !Detecting  <- RA4|3      16|                              *
 ;                            |4      15|                              *
 ;                            |5      14|      Aspects:                *
-;                         RB0|6      13|RB7 ->                        *
-; Next <-> / !Inhibit  -> RB1|7      12|RB6 ->                        *
-;            Previous <-> RB2|8      11|RB5 ->                        *
-;       Special speed  -> RB3|9      10|RB4 ->                        *
+;     !Latch Signal On -> RB0|6      13|RB7 -> Stop                   *
+; Next <-> / !Inhibit  -> RB1|7      12|RB6 -> Clear1                 *
+;            Previous <-> RB2|8      11|RB5 -> Clear2                 *
+;       Special speed  -> RB3|9      10|RB4 -> Clear                  *
 ;                            +---------+                              *
 ;                                                                     *
 ;**********************************************************************
@@ -165,6 +165,10 @@ SNSPORT     EQU     PORTA       ; Sensor input port
 SNSBIT      EQU     3           ; Sensor input bit (active high)
 DETPORT     EQU     PORTA       ; Detection indicator port
 DETBIT      EQU     4           ; Detection indicator bit (active low)
+
+; Latch signal 'on' input constants
+LCHPORT     EQU     PORTB       ; Latch signal input port
+LCHBIT      EQU     0           ; Latch signal input bit (active low)
 
 ; Inhibit (force display of red aspect) input constants
 INHPORT     EQU     PORTB       ; Inhibit input port
@@ -880,17 +884,28 @@ NextSignalEnd
 
 NextLinkEnd
 
-    ; Unless the local signal is inhibited this controller normally displays
-    ; the signal aspect for the next block (either received or simulated)
+    ; Unless the local signal is inhibited or latched this controller normally
+    ; displays the signal aspect for the next block (received or simulated)
 
+    movlw   ASPSTATE
+    andwf   lclCntlr,W      ; Test local signal aspect value
+    btfss   STATUS,Z        ; Skip if local signal aspect value = stop ...
+    goto    SetLocalAspect  ; ... otherwise set local aspect
+
+    btfss   inputs,LCHBIT   ; Skip if latch input is off (active low) ...
+    goto    SkipLocalAspect ; ... otherwise skip setting local aspect
+
+SetLocalAspect
     movlw   ~ASPSTATE
     andwf   lclCntlr,F      ; Clear local signal aspect value bits
 
     movlw   ASPSTATE
     andwf   nxtCntlr,W      ; Get local signal aspect from next controller
 
-    btfss   lclCntlr,INHFLG ; Skip if signal is line inhibited ...
+    btfss   lclCntlr,INHFLG ; Skip if signal is inhibited ...
     iorwf   lclCntlr,F      ; ... else use the signal aspect for display
+
+SkipLocalAspect
 
     ; This block's signal aspect value (displayed by previous controller)
     ; depends on the aspect value of the local signal.
