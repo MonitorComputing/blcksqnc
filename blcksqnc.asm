@@ -87,7 +87,6 @@
 ; Include serial link interface macros
 #define CLKD_SERIAL
 #include <\dev\projects\utility\pic\asyn_srl.inc>
-#define CLKD_LINK
 #include <\dev\projects\utility\pic\link_hd.inc>
 
 
@@ -413,30 +412,12 @@ IntVector
     ; Service next controller link
     ;******************************************************************
 
-    decf    serNTimer,W     ; Decrement serial timing counter
-    btfss   STATUS,Z        ; Skip if zero ...
-    goto    SkipLinkN       ; ... else skip servicing the link
-
     SrvcLink  lnkNState, lnkNTimer, serNTimer, INTLNKDLYRX, INTLNKDLYTX, INTLINKTMON, EnableTxN, InitTxN, SrvcTxN, IsTxIdleN, TxBreakN, EnableRxN, InitRxN, SrvcRxN
-
-    movf    serNTimer,W     ; Get new serial timing counter value
-
-SkipLinkN
-    movwf   serNTimer       ; Update the serial timing counter
 
     ; Service previous controller link
     ;******************************************************************
 
-    decf    serPTimer,W     ; Decrement serial timing counter
-    btfss   STATUS,Z        ; Skip if not zero ...
-    goto    SkipLinkP       ; ... else skip servicing the link
-
     SrvcLink  lnkPState, lnkPTimer, serPTimer, INTLNKDLYRX, INTLNKDLYTX, INTLINKTMOP, EnableTxP, InitTxP, SrvcTxP, IsTxIdleP, TxBreakP, EnableRxP, InitRxP, SrvcRxP
-
-    movf    serPTimer,W     ; Get new serial timing counter value
-
-SkipLinkP
-    movwf   serPTimer       ; Update the timer
 
     ; Run interrupt scaling counter for second timing
     ;******************************************************************
