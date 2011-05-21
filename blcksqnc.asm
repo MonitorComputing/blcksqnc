@@ -85,47 +85,64 @@
 ; See respective data sheet for additional information on configuration word.
 
 ; Include serial link interface macros
+;  - Serial link bit timing is performed by link service routines
 #define CLKD_SERIAL
 #include <\dev\projects\utility\pic\asyn_srl.inc>
 #include <\dev\projects\utility\pic\link_hd.inc>
 
 
+#ifndef maxlwdefined
+#define maxlwdefined
 ;**********************************************************************
-; Macro definitions
+;                                                                     *
+; Macro:     MaxLw                                                    *
+;                                                                     *
+;            Utility to load W with numerically greater of arguments  *
+;                                                                     *
 ;**********************************************************************
-MaxIns      macro   arg1, arg2, instr
+MaxLw   macro   arg1, arg2
 
 #if (arg1 > arg2)
-    instr   arg1
+    movlw   arg1
 #else
-    instr   arg2
+    movlw   arg2
 #endif
 
     endm
+#endif
+
 
 ;**********************************************************************
 ; Constant definitions
 ;**********************************************************************
 MaxIns      macro   arg1, arg2, instr
 
-; I/O port direction it masks
+; Address defintions
+BootVector  EQU     0x000
+EEpromStart EQU     0x2100
+IntVector   EQU     0x004
+RamStart    EQU     0x0C
+RamEnd      EQU     0x2F
+
+; I/O port direction masks
 PORTASTATUS EQU     B'00001000'
 PORTBSTATUS EQU     B'00001011'
 
 ; Interrupt & timing constants
-RTCCINT     EQU     160         ; 10KHz = ((4MHz / 4) / 100)
+RTCCINT     EQU     160         ; 10KHz = ((4MHz / 4) / 100) (0.1 mSec tick)
 
 ; Timing constants
-INTSCLNG    EQU     80 + 1      ; Interrupts scaling for seconds (gives 125Hz)
+INTSCLNG    EQU     80 + 1      ; Interrupts scaling to 125Hz (8 mSec tick)
 SECSCLNG    EQU     125         ; Scaled interrupts per second
 HALFSEC     EQU     B'11000000' ; Roughly half second scaled interrupts mask
 
 INTSERINI   EQU     6           ; Interrupts per initial Rx serial bit @ 2K5
 INTSERBIT   EQU     4           ; Interrupts per serial bit @ 2K5 baud
-INTLNKDLYRX EQU     0           ; Interrupt cycles for link Rx turnaround delay
-INTLNKDLYTX EQU     4           ; Interrupt cycles for link Tx turnaround delay
-INTLINKTMOP EQU     35          ; Interrupt cycles for previous link Rx timeout
-INTLINKTMON EQU     255         ; Interrupt cycles for next link Rx timeout
+INTLNKDLYRX EQU     0           ; Interrupts for link Rx turnaround delay
+INTLNKDLYTX EQU     4           ; Interrupts for link Tx turnaround delay
+
+INTLINKTMOP EQU     5           ; Scaled interrupts, previous link timeout
+INTLINKTMON EQU     25          ; Scaled interrupts, next link timeout
 
 ; Next controller serial interface constants (see 'asyn_srl.inc')
 RXNFLG      EQU     0           ; Receive byte buffer 'loaded' status bit
@@ -138,8 +155,8 @@ RXNBIT      EQU     1           ; Rx input bit
 
 TXNFLG      EQU     RXNFLG      ; Transmit byte buffer 'clear' status bit
 TXNBREAK    EQU     RXNBREAK    ; Send 'break' status bit
-TXNTRIS     EQU     TRISB       ; Tx port direction register
-TXNPORT     EQU     PORTB       ; Tx port data register
+TXNTRIS     EQU     RXNPORT     ; Tx port direction register
+TXNPORT     EQU     RXNPORT     ; Tx port data register
 TXNBIT      EQU     RXNBIT      ; Tx output bit
 
 ; Previous controller serial interface constants (see 'asyn_srl.inc')
@@ -153,8 +170,8 @@ RXPBIT      EQU     2           ; Rx input bit
 
 TXPFLG      EQU     RXPFLG      ; Transmit byte buffer 'clear' status bit
 TXPBREAK    EQU     RXPBREAK    ; Send 'break' status bit
-TXPTRIS     EQU     TRISB       ; Tx port direction register
-TXPPORT     EQU     PORTB       ; Tx port data register
+TXPTRIS     EQU     RXPTRIS     ; Tx port direction register
+TXPPORT     EQU     RXPPORT     ; Tx port data register
 TXPBIT      EQU     RXPBIT      ; Tx output bit
 
 ; Detector I/O constants
@@ -230,7 +247,7 @@ INPACTV     EQU     7           ; Indicates debounce accumulator > high water
 ; Variable registers
 ;**********************************************************************
 
-            CBLOCK  0x0C
+            CBLOCK  RamStart
 
 ; Status and accumulator storage during interrupt
 w_isr           ; 'w' register, accumulator, store during ISR
@@ -264,25 +281,16 @@ serNBffr        ; Data byte buffer
 
 lnkNTimer       ; Rx timeout timer
 lnkNState       ; Link state register (see 'link_hd.inc')
-                ;   bit 0,3 - Current state
-                ;          Rx states must be in the range 0 to 3
+                ;   bits 0,1 - Current state
                 ;     0  - Switching to Rx
-                ;     1  - Waiting for interface lines to settle
-                ;     2  - Receiving data
-                ;     3  - Unused
-                ;          Tx states must be in the range 4 to 15
-                ;     4  - Unused
-                ;     5  - Unused
-                ;     6  - Switching to Tx
-                ;     7  - Waiting for far end to turn around
-                ;          'Active' Tx states must be in the range 8 to 15
-                ;     8  - Waiting for interface lines to settle
-                ;     9  - Transmiting break
-                ;     10 - Transmiting data
-                ;   bit 4 - Tx enabled
-                ;   bit 5 - Rx enabled
-                ;   bit 6 - Synchronise, Tx or Rx a break
-                ;   bit 7 - Required direction, set = Tx, clear = Rx
+                ;     1  - Receiving data
+                ;     2  - Waiting for far end to turn around
+                ;     3  - Transmiting data
+                ;   bits 2,3 - Unused
+                ;   bit  4 - Tx enabled
+                ;   bit  5 - Rx enabled
+                ;   bit  6 - Synchronise, Tx or Rx a break
+                ;   bit  7 - Required direction, set = Tx, clear = Rx
 
 ; Previous controller interface
 serPTimer       ; Interrupt counter for serial bit timing
@@ -292,25 +300,16 @@ serPBffr        ; Data byte buffer
 
 lnkPTimer       ; Rx timeout timer
 lnkPState       ; Link state register (see 'link_hd.inc')
-                ;   bit 0,3 - Current state
-                ;          Rx states must be in the range 0 to 3
+                ;   bits 0,1 - Current state
                 ;     0  - Switching to Rx
-                ;     1  - Waiting for interface lines to settle
-                ;     2  - Receiving data
-                ;     3  - Unused
-                ;          Tx states must be in the range 4 to 15
-                ;     4  - Unused
-                ;     5  - Unused
-                ;     6  - Switching to Tx
-                ;     7  - Waiting for far end to turn around
-                ;          'Active' Tx states must be in the range 8 to 15
-                ;     8  - Waiting for interface lines to settle
-                ;     9  - Transmiting break
-                ;     10 - Transmiting data
-                ;   bit 4 - Tx enabled
-                ;   bit 5 - Rx enabled
-                ;   bit 6 - Synchronise, Tx or Rx a break
-                ;   bit 7 - Required direction, set = Tx, clear = Rx
+                ;     1  - Receiving data
+                ;     2  - Waiting for far end to turn around
+                ;     3  - Transmiting data
+                ;   bits 2,3 - Unused
+                ;   bit  4 - Tx enabled
+                ;   bit  5 - Rx enabled
+                ;   bit  6 - Synchronise, Tx or Rx a break
+                ;   bit  7 - Required direction, set = Tx, clear = Rx
 
 intScCount      ; Interrupt scaling counter for second timing
 secCount        ; Scaled interrupts counter for second timing
@@ -368,7 +367,7 @@ REVMSK      EQU     B'00001000' ; Line reversed state bit mask
 ; EEPROM initialisation
 ;**********************************************************************
 
-            ORG     0x2100  ; EEPROM data area
+            ORG EEpromStart ; EEPROM data area
 
 EEaspectTime    DE  6       ; Seconds to delay between aspect changes
 
@@ -377,47 +376,47 @@ EEaspectTime    DE  6       ; Seconds to delay between aspect changes
 ; Reset vector
 ;**********************************************************************
 
-            ORG     0x000   ; Processor reset vector
+            ORG BootVector  ; Processor reset vector
 
-BootVector
     clrf    INTCON          ; Disable interrupts
     clrf    INTCON          ; Ensure interrupts are disabled
-    goto    Boot            ; Jump to beginning of program
+    goto    Initialise      ; Jump to beginning of program
 
 
 ;**********************************************************************
 ; Interrupt Service Routine
 ;**********************************************************************
 
-            ORG     0x004   ; Interrupt vector location
+            ORG IntVector   ; Interrupt vector location
 
-IntVector
+BeginISR
     movwf   w_isr           ; Save off current W register contents
     swapf   STATUS,W        ; Swap status register into W register
     BANKSEL TMR0            ; Ensure register page 0 is selected
     movwf   status_isr      ; save off contents of STATUS register
     movf    PCLATH,W        ; Move PCLATH register into W register
     movwf   pclath_isr      ; save off contents of PCLATH register
-    movlw   high IntVector  ; Load ISR address high byte ...
+    movlw   high BeginISR   ; Load ISR address high byte ...
     movwf   PCLATH          ; ... into PCLATH to set code block
 
-    btfss   INTCON,T0IF     ; Test for RTCC Interrupt
-    goto    EndISR          ; If not, skip service routine
+    btfss   INTCON,T0IF     ; Skip if TMR0 overflow interrupt ...
+    goto    ExitISR         ; ... else skip service routine
 
+RunISR
     ; Re-enable the timer interrupt and reload the timer
-    bcf     INTCON,T0IF     ; Reset the RTCC Interrupt bit
-    movlw   (RTCCINT - 2)   ; Allow 2 cycles for RTCC write inhibit
-    addwf   TMR0,F          ; Reload RTCC
+    bcf     INTCON,T0IF     ; Reset the TMR0 Interrupt bit
+    movlw   (RTCCINT - 2)   ; Allow 2 cycles for TMR0 write inhibit
+    addwf   TMR0,F          ; Reload TMR0
 
     ; Service next controller link
     ;******************************************************************
 
-    SrvcLink  lnkNState, lnkNTimer, serNTimer, INTLNKDLYRX, INTLNKDLYTX, INTLINKTMON, EnableTxN, InitTxN, SrvcTxN, IsTxIdleN, TxBreakN, EnableRxN, InitRxN, SrvcRxN
+    SrvcLink  lnkNState, serNTimer, INTLNKDLYRX, INTLNKDLYTX, EnableTxN, InitTxN, SrvcTxN, TxBreakN, EnableRxN, InitRxN, SrvcRxN
 
     ; Service previous controller link
     ;******************************************************************
 
-    SrvcLink  lnkPState, lnkPTimer, serPTimer, INTLNKDLYRX, INTLNKDLYTX, INTLINKTMOP, EnableTxP, InitTxP, SrvcTxP, IsTxIdleP, TxBreakP, EnableRxP, InitRxP, SrvcRxP
+    SrvcLink  lnkPState, serPTimer, INTLNKDLYRX, INTLNKDLYTX, EnableTxP, InitTxP, SrvcTxP, TxBreakP, EnableRxP, InitRxP, SrvcRxP
 
     ; Run interrupt scaling counter for second timing
     ;******************************************************************
@@ -467,10 +466,16 @@ SensorEnd
     iorlw   ~ASPOUTMSK
     andwf   ASPPORT,F
 
+    ; End Interrupt Service Routine
+    ;******************************************************************
+
+    btfsc   INTCON,T0IF     ; Skip if no TMR0 overflow during ISR ...
+    goto    RunISR          ; ... else run service routine again
+
     ; Exit Interrupt Service Routine
     ;******************************************************************
 
-EndISR
+ExitISR
     movf    pclath_isr,W    ; Retrieve copy of PCLATH register
     movwf   PCLATH          ; Restore pre-isr PCLATH register contents
     swapf   status_isr,W    ; Swap copy of STATUS register into W register
@@ -505,7 +510,7 @@ GetAspectMask
 ; Main program initialisation code
 ;**********************************************************************
 
-Boot
+Initialise
     ; Clear I/O ports
     ;******************************************************************
 
@@ -543,14 +548,14 @@ Boot
     ; Initialise RAM to zero
     ;******************************************************************
 
-    movlw   0x2F            ; Address of end of RAM
-    movwf   0x0C            ; Ensure first byte of RAM is non zero
+    movlw   RamEnd          ; Address of end of RAM
+    movwf   RamStart        ; Ensure first byte of RAM is non zero
     movwf   FSR             ; Point indirect register to end of RAM
 
 ClearRAM
     clrf    INDF            ; Clear byte of RAM addressed by FSR
     decf    FSR,F           ; Decrement FSR to next byte of RAM
-    movf    0x0C,F          ; Test first byte of RAM
+    movf    RamStart,F      ; Test first byte of RAM
     btfss   STATUS,Z        ; Skip if byte of RAM now zero ...
     goto    ClearRAM        ; ... else continue to clear RAM
 
@@ -559,6 +564,8 @@ ClearRAM
     ; Inputs are active low so initialise debounce for all off
     comf    debnce,F
     comf    inputs,F
+
+    bsf     lnkPState,LNKDIRFLG ; Initially send to previous controller
 
     ; Initialise timing
     ;******************************************************************
@@ -577,9 +584,9 @@ ClearRAM
     ;******************************************************************
 
     movlw   RTCCINT
-    movwf   TMR0            ; Initialise RTCC for timer interrupts
+    movwf   TMR0            ; Initialise TMR0 for timer interrupts
     clrf    INTCON          ; Disable all interrupt sources
-    bsf     INTCON,T0IE     ; Enable RTCC interrupts
+    bsf     INTCON,T0IE     ; Enable TMR0 interrupts
     bsf     INTCON,GIE      ; Enable interrupts
 
     ;******************************************************************
@@ -618,16 +625,31 @@ Timing
     andlw   0x0F            ; Discard bits 4 to 7
     iorwf   FSR,F           ; Combine with saved port A bits
 
-    movf    FSR,W           ; Get combined new port inputs
-    xorwf   debnce,W        ; Create a mask of mismatched old and new inputs
-    andwf   inputs,F        ; Keep previous debounced inputs for mismatches
+    ; First of all clear all input bits where current and last port reads match
+    ; leaving unchanged any inputs where current doesn't match last port read
+    movf    FSR,W           ; Get combined current port bits
+    xorwf   debnce,W        ; Create mask for inputs changed since last read
+    andwf   inputs,F        ; Clear inputs unchanged since last read
 
-    xorlw   0xFF            ; Flip mask to be for matched old and new inputs
-    andwf   FSR,W           ; Get matched new debounced inputs
-    iorwf   inputs,F        ; Combine with kept previous debounced inputs
+    ; Next set any input bits on for both current and last port read
+    ; leaving unchanged any inputs where current doesn't match last port read
+    xorlw   0xFF            ; Create mask for inputs unchanged since last read
+    andwf   FSR,W           ; Get current port bits unchanged since last read
+    iorwf   inputs,F        ; Set inputs unchanged since last read
 
-    movf    FSR,W           ; Save combined new port bits ...
-    movwf   debnce          ; ... for next debounce cycle
+    movf    FSR,W           ; Save combined current port bits ...
+    movwf   debnce          ; ... as last read value for next debounce cycle
+
+    ; Run link reception timeouts
+    ;******************************************************************
+
+    decf    lnkPTimer,W     ; Check previous controller link reception timeout
+    btfss   STATUS,Z        ; Skip if link timedout ...
+    movwf   lnkPTimer       ; ... else update timeout counter
+
+    decf    lnkNTimer,W     ; Check next controller link reception timeout
+    btfss   STATUS,Z        ; Skip if link timedout ...
+    movwf   lnkNTimer       ; ... else update timeout counter
 
     ; Run one second timing
     ;******************************************************************
@@ -713,11 +735,14 @@ TimingEnd
 
     bcf     lnkPState,LNKDIRFLG ; Start waiting on reply from previous
 
+    MaxLw   INTLINKTMOP, 1
+    movwf   lnkPTimer       ; Start reception timeout
+
 CheckPrevRx
     ; Check for status reply from previous controller
     ;******************************************************************
 
-    call    LinkRxToP       ; Check link reception timeout
+    decf    lnkPTimer,W     ; Check link reception timeout
     btfsc   STATUS,Z        ; Skip if link not timedout ...
     goto    PrevRxDone      ; ... else resume sending to previous controller
 
@@ -733,14 +758,14 @@ CheckPrevRx
     xorwf   telemPrv,F      ; Test against last received data
     movwf   telemPrv        ; Replace last received data
     btfss   STATUS,Z        ; Skip if last and just received data match ...
-    goto    PrevLinkEnd      ; ... else ignore just received data
+    goto    PrevLinkEnd     ; ... else ignore just received data
 
     ; Only four bits of signalling status need to be sent so as a simple error
     ; check these are sent in low nibble with ones complement in high nibble
 
     movf    FSR,W           ; Signalling in low nibble, ones complement in high
     swapf   FSR,F           ; Swap nibbles of the received data
-    comf    FSR,F           ; Ones complement the swappeed received data
+    comf    FSR,F           ; Ones complement the swapped received data
     xorwf   FSR,F           ; Exclusive or complemented and swapped data
     btfss   STATUS,Z        ; Skip if result is zero, i.e. data is ok ...
     goto    PrevLinkEnd      ; ... else ignore just received data
@@ -814,6 +839,9 @@ CheckNextRx
 
     bsf     lnkNState,LNKDIRFLG ; Start replying to next controller
 
+    MaxLw   INTLINKTMON, 1
+    movwf   lnkNTimer       ; Reset link reception timeout
+
     goto    NextLinkEnd
 
 NextRxEnd
@@ -821,8 +849,8 @@ NextRxEnd
     ; Test if next controller link has timedout
     ;******************************************************************
 
-    call    LinkRxToN       ; Check link reception timeout
-    btfsc   STATUS,Z        ; Skip if link timedout ...
+    decf    lnkNTimer,W     ; Check link reception timeout
+    btfsc   STATUS,Z        ; Skip if link not timedout ...
     goto    NextLinkFailed  ; ... else handle link failure
 
     ; Signal inhibit input cannot be read until link has timed out
@@ -1165,20 +1193,15 @@ InitTxN     InitTx  srlIfStat, serNTimer, serNBitCnt, serNReg, TXNFLG, TXNBREAK
     return
 
 TxBreakN    TxBreak  srlIfStat, TXNBREAK
+    return
 
 SrvcTxN     ServiceTx  srlIfStat, serNTimer, serNBitCnt, serNReg, serNBffr, TXNPORT, TXNBIT, RXNPORT, RXNBIT, INTSERBIT, TXNFLG, TXNBREAK
 
 SerTxN      SerialTx  srlIfStat, serNBffr, TXNFLG
 
-IsTxIdleN   IsTxIdle  serNBitCnt
-    return
-
 LinkRxN     LinkRx  lnkNState, SerRxN
 
 LinkTxN     LinkTx  lnkNState, SerTxN
-
-LinkRxToN   IsLinkRxTo  lnkNState, lnkNTimer
-    return
 
 
 ;**********************************************************************
@@ -1202,20 +1225,15 @@ InitTxP     InitTx  srlIfStat, serPTimer, serPBitCnt, serPReg, TXPFLG, TXPBREAK
     return
 
 TxBreakP    TxBreak  srlIfStat, TXPBREAK
+    return
 
 SrvcTxP     ServiceTx  srlIfStat, serPTimer, serPBitCnt, serPReg, serPBffr, TXPPORT, TXPBIT, RXPPORT, RXPBIT, INTSERBIT, TXPFLG, TXPBREAK
 
 SerTxP      SerialTx  srlIfStat, serPBffr, TXPFLG
 
-IsTxIdleP   IsTxIdle  serPBitCnt
-    return
-
 LinkRxP     LinkRx  lnkPState, SerRxP
 
 LinkTxP     LinkTx  lnkPState, SerTxP
-
-LinkRxToP   IsLinkRxTo   lnkPState, lnkPTimer
-    return
 
 
 ;**********************************************************************
