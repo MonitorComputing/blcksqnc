@@ -68,10 +68,9 @@
 ; Include and configuration directives
 ;**********************************************************************
 
-    list      p=16C84
+    list      p=16F84
 
-#include <p16C84.inc>
-
+#include "p16f84.inc"
 ; Configuration word
 ;  - Code Protection Off
 ;  - Watchdog timer enabled
@@ -87,8 +86,8 @@
 ; Include serial link interface macros
 ;  - Serial link bit timing is performed by link service routines
 #define CLKD_SERIAL
-#include <\dev\projects\utility\pic\asyn_srl.inc>
-#include <\dev\projects\utility\pic\link_hd.inc>
+#include "utility/asyn_srl.inc"
+#include "utility/link_hd.inc"
 
 
 #ifndef maxlwdefined
