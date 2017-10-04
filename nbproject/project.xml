@@ -4,12 +4,12 @@
     <configuration>
         <data xmlns="http://www.netbeans.org/ns/make-project/1">
             <name>blcksqnc</name>
-            <creation-uuid>80db3ca6-a388-4244-a0a0-cff5ea2fa60e</creation-uuid>
+            <creation-uuid>2ed2fd51-29d9-4323-8855-b274531fb007</creation-uuid>
             <make-project-type>0</make-project-type>
             <c-extensions/>
             <cpp-extensions/>
             <header-extensions/>
-            <asminc-extensions>inc</asminc-extensions>
+            <asminc-extensions/>
             <sourceEncoding>ISO-8859-1</sourceEncoding>
             <make-dep-projects/>
         </data>
