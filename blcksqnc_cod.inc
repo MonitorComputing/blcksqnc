@@ -123,6 +123,20 @@ ExitISR
 
 
 ;**********************************************************************
+; Subroutine to read EEPROM
+;**********************************************************************
+
+ReadEEPROM
+    movwf   EEADR           ; Set address of EEPROM location to read
+    BANKSEL EECON1
+    bsf     EECON1,RD       ; Trigger EEPROM read
+    BANKSEL EEDATA
+    movf    EEDATA,W        ; Get EEPROM data read
+    BANKSEL TMR0
+    return
+
+
+;**********************************************************************
 ; Main program initialisation code
 ;**********************************************************************
 
@@ -187,14 +201,15 @@ ClearRAM
     ;******************************************************************
 
     movlw   low EEaspectTime
-    movwf   EEADR           ; Set address of EEPROM location to read
-    BANKSEL EECON1
-    bsf     EECON1,RD       ; Trigger EEPROM read
-    BANKSEL EEDATA
-    movf    EEDATA,W        ; Get EEPROM data read
-    BANKSEL TMR0
+    call    ReadEEPROM
     movwf   aspectTime      ; Initialise aspect interval for next signal
     movwf   nxtTimer        ; Initialise timer used to simulate next signal
+
+    ; Optional initialisation (user code should define UserInit macro)
+    ;******************************************************************
+#ifdef UserInit
+    UserInit
+#endif
 
     ; Initialise interrupts
     ;******************************************************************
@@ -742,6 +757,12 @@ BlockEnd    ; End of signal block state machine
     andlw   ASPSTATE        ; Isolate aspect value
     movwf   aspOut          ; Save as aspect display value
 
+
+    ; Optional main loop code (user code should define UserMain macro)
+    ;******************************************************************
+#ifdef UserMain
+    UserMain
+#endif
 
     ;******************************************************************
     ; End of main processing loop
