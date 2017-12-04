@@ -1,5 +1,5 @@
 ;**********************************************************************
-; Include and configuration directives
+; Configuration directives
 ;**********************************************************************
 
     list      p=16F84
@@ -11,17 +11,11 @@
 ;  - Power up timer enabled
 ;  - Crystal (resonator) oscillator
 
-    __CONFIG   _CP_OFF & _PWRTE_ON & _XT_OSC
+    __config   _CP_OFF & _PWRTE_ON & _XT_OSC
 
-; '__CONFIG' directive is used to embed configuration data within .asm file.
+; '__config' directive is used to embed configuration data within .asm file.
 ; The lables following the directive are located in the respective .inc file.
 ; See respective data sheet for additional information on configuration word.
-
-; Include serial link interface macros
-;  - Serial link bit timing is performed by link service routines
-#define CLKD_SERIAL
-#include "utility/asyn_srl.inc"
-#include "utility/link_hd.inc"
 
 
 #ifndef maxlwdefined
@@ -51,10 +45,11 @@ MaxLw   macro   arg1, arg2
 
 ; Address defintions
 BootVector  EQU     0x000
+CodeEnd     EQU     0x33F
 EEpromStart EQU     0x2100
 IntVector   EQU     0x004
-RamStart    EQU     0x0C
-RamEnd      EQU     0x2F
+RAM_Start   EQU     0x0C
+RAM_End     EQU     0x4F
 
 ; I/O port direction masks
 PORTASTATUS EQU     B'00001000'
@@ -76,35 +71,51 @@ INTLNKDLYTX EQU     4           ; Interrupts for link Tx turnaround delay
 INTLINKTMOP EQU     5           ; Scaled interrupts, previous link timeout
 INTLINKTMON EQU     25          ; Scaled interrupts, next link timeout
 
-; Next controller serial interface constants (see 'asyn_srl.inc')
-RXNFLG      EQU     0           ; Receive byte buffer 'loaded' status bit
-RXNERR      EQU     1           ; Receive error status bit
-RXNBREAK    EQU     2           ; Received 'break' status bit
-RXNSTOP     EQU     3           ; Seeking stop bit status bit
+; Next controller link serial interface ports
 RXNTRIS     EQU     TRISB       ; Rx port direction register
 RXNPORT     EQU     PORTB       ; Rx port data register
 RXNBIT      EQU     1           ; Rx input bit
-
-TXNFLG      EQU     RXNFLG      ; Transmit byte buffer 'clear' status bit
-TXNBREAK    EQU     RXNBREAK    ; Send 'break' status bit
+;  Half duplex so Rx and Tx use same port
 TXNTRIS     EQU     RXNPORT     ; Tx port direction register
 TXNPORT     EQU     RXNPORT     ; Tx port data register
 TXNBIT      EQU     RXNBIT      ; Tx output bit
 
-; Previous controller serial interface constants (see 'asyn_srl.inc')
+; Previous controller link serial interface ports
+RXPTRIS     EQU     TRISB       ; Rx port direction register
+RXPPORT     EQU     PORTB       ; Rx port data register
+RXPBIT      EQU     2           ; Rx input bit
+;  Half duplex so Rx and Tx use same port
+TXPTRIS     EQU     RXPTRIS     ; Tx port direction register
+TXPPORT     EQU     RXPPORT     ; Tx port data register
+TXPBIT      EQU     RXPBIT      ; Tx output bit
+
+; Serial interface status flags (see 'asyn_srl.inc')
+
+;  Next controller link
+;   bit 0 - Rx buffer full, Tx buffer clear
+;   bit 1 - Rx error
+;   bit 2 - Received or sending break
+;   bit 3 - Seeking stop bit
+RXNFLG      EQU     0           ; Receive byte buffer 'loaded' status bit
+RXNERR      EQU     1           ; Receive error status bit
+RXNBREAK    EQU     2           ; Received 'break' status bit
+RXNSTOP     EQU     3           ; Seeking stop bit status bit
+;  Half duplex so Rx and Tx flags share bits
+TXNFLG      EQU     RXNFLG      ; Transmit byte buffer 'clear' status bit
+TXNBREAK    EQU     RXNBREAK    ; Send 'break' status bit
+
+;  Previous controller link
+;   bit 4 - Rx buffer full, Tx buffer clear
+;   bit 5 - Rx error
+;   bit 6 - Received or sending break
+;   bit 7 - Seeking stop bit
 RXPFLG      EQU     4           ; Receive byte buffer 'loaded' status bit
 RXPERR      EQU     5           ; Receive error status bit
 RXPBREAK    EQU     6           ; Received 'break' status bit
 RXPSTOP     EQU     7           ; Seeking stop bit
-RXPTRIS     EQU     TRISB       ; Rx port direction register
-RXPPORT     EQU     PORTB       ; Rx port data register
-RXPBIT      EQU     2           ; Rx input bit
-
+;  Half duplex so Rx and Tx flags share bits
 TXPFLG      EQU     RXPFLG      ; Transmit byte buffer 'clear' status bit
 TXPBREAK    EQU     RXPBREAK    ; Send 'break' status bit
-TXPTRIS     EQU     RXPTRIS     ; Tx port direction register
-TXPPORT     EQU     RXPPORT     ; Tx port data register
-TXPBIT      EQU     RXPBIT      ; Tx output bit
 
 ; Detector I/O constants
 EMTPORT     EQU     PORTA       ; Emitter drive port
@@ -118,7 +129,7 @@ DETBIT      EQU     4           ; Detection indicator bit (active low)
 LCHPORT     EQU     PORTB       ; Latch signal input port
 LCHBIT      EQU     0           ; Latch signal input bit (active low)
 
-; Inhibit (force display of red aspect) input constants
+; Inhibit (force display of stop aspect) input constants
 INHPORT     EQU     PORTB       ; Inhibit input port
 INHBIT      EQU     1           ; Inhibit input bit (active low)
 
@@ -168,10 +179,10 @@ SPDMSK      EQU     B'00010000' ; Special speed state bit mask
 
 ; Aspect output constants
 ASPPORT     EQU     PORTB       ; Aspect output port
-STPMSK      EQU     B'10000000' ; Mask for red aspect output bit
-CL1MSK      EQU     B'01000000' ; Mask for yellow aspect output bit
-CL2MSK      EQU     B'00100000' ; Mask for double yellow aspect output bit
-CLRMSK      EQU     B'00010000' ; Mask for green aspect output bit
+STPMSK      EQU     B'10000000' ; Mask for stop aspect output bit
+CL1MSK      EQU     B'01000000' ; Mask for clear1 aspect output bit
+CL2MSK      EQU     B'00100000' ; Mask for clear2 yellow aspect output bit
+CLRMSK      EQU     B'00010000' ; Mask for clear aspect output bit
 ASPOUTMSK   EQU     B'11110000' ; Mask for aspect output bits
 
 INPACTV     EQU     7           ; Indicates debounce accumulator > high water

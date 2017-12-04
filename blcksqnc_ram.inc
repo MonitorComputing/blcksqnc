@@ -2,7 +2,7 @@
 ; Variable registers
 ;**********************************************************************
 
-            CBLOCK  RamStart
+            cblock  RAM_Start
 
 ; Status and accumulator storage during interrupt
 w_isr           ; 'w' register, accumulator, store during ISR
@@ -11,22 +11,6 @@ status_isr      ; status register store during ISR
 
 ; Serial interface
 srlIfStat       ; Serial I/F status flags (see 'asyn_srl.inc')
-                ;
-                ;  Next link (half duplex so Rx and Tx flags share bits)
-                ;  =====================================================
-                ;
-                ;   bit 0 - Rx buffer full, Tx buffer clear
-                ;   bit 1 - Rx error
-                ;   bit 2 - Received or sending break
-                ;   bit 3 - Seeking stop bit
-                ;
-                ;  Previous link (half duplex so Rx and Tx flags share bits)
-                ;  =========================================================
-                ;
-                ;   bit 4 - Rx buffer full, Tx buffer clear
-                ;   bit 5 - Rx error
-                ;   bit 6 - Received or sending break
-                ;   bit 7 - Seeking stop bit
 
 ; Next controller interface
 serNTimer       ; Interrupt counter for serial bit timing
@@ -112,5 +96,3 @@ aspectTime      ; Aspect interval for simulating next signal
 nxtTimer        ; Second counter for simulating next signal
 telemPrv        ; Data last received from previous controller
 telemNxt        ; Data last received from next controller
-
-            ENDC

@@ -2,19 +2,20 @@
 ;                                                                     *
 ;    Description:   Controller for occupation block with positional   *
 ;                   train detector at exit.                           *
-;                   Receives value of signal aspect to be displayed   *
-;                   along with indication of previous signal giving   *
-;                   special speed indication and block reversed from  *
-;                   next (in advance) controller.                     *
-;                   Sends train detection state to next controller.   *
+;                                                                     *
 ;                   Receives train detection state from previous (in  *
 ;                   rear) controller which it uses as entry detector  *
 ;                   for occupation block.                             *
 ;                   Sends value of signal aspect (increment of local  *
 ;                   value of signal aspect) along with special speed  *
-;                   along with indication of local signal giving      *
-;                   special speed indication and block reversed to    *
-;                   previous controller.                              *
+;                   indication and block reversed to previous         *
+;                   controller.                                       *
+;                                                                     *
+;                   Receives value of signal aspect to be displayed   *
+;                   along with special speed indication and block     *
+;                   reversed from next (in advance) controller.       *
+;                   Sends train detection state to next controller.   *
+;                                                                     *
 ;                   If no data is received from next controller link  *
 ;                   input is treated as a level input indicating      *
 ;                   to display a stop aspect or to cycle aspect from  *
@@ -64,9 +65,30 @@
 ;**********************************************************************
 
 
+;**********************************************************************
+; Configuration directives and constant definitions
+;**********************************************************************
 #include "blcksqnc_def.inc"
+  
+;**********************************************************************
+; Variable registers
+;**********************************************************************
 #include "blcksqnc_ram.inc"
+afterRAM
+            endc
+endRAM      EQU afterRAM - 1
+#if RAM_End < endRAM
+    error "This program ran out of RAM!"
+#endif
+
+;**********************************************************************
+; EEPROM initialisation
+;**********************************************************************
 #include "blcksqnc_rom.inc"
+
+;**********************************************************************
+; Code
+;**********************************************************************
 #include "blcksqnc_cod.inc"
 
 ;**********************************************************************
@@ -90,8 +112,7 @@ GetAspectMask
 ; End of source code
 ;**********************************************************************
 
-#if 0x33F < $
+#if CodeEnd < $
     error "This program is just too big!"
 #endif
-
     end     ; directive 'end of program'

@@ -1,8 +1,15 @@
+; Include serial link interface macros
+;  - Serial link bit timing is performed by link service routines
+#define CLKD_SERIAL
+#include "utility/asyn_srl.inc"
+#include "utility/link_hd.inc"
+
+
 ;**********************************************************************
 ; Reset vector
 ;**********************************************************************
 
-            ORG BootVector  ; Processor reset vector
+            org BootVector  ; Processor reset vector
 
     clrf    INTCON          ; Disable interrupts
     clrf    INTCON          ; Ensure interrupts are disabled
@@ -13,7 +20,7 @@
 ; Interrupt Service Routine
 ;**********************************************************************
 
-            ORG IntVector   ; Interrupt vector location
+            org IntVector   ; Interrupt vector location
 
 BeginISR
     movwf   w_isr           ; Save off current W register contents
@@ -157,14 +164,14 @@ Initialise
     ; Initialise RAM to zero
     ;******************************************************************
 
-    movlw   RamEnd          ; Address of end of RAM
-    movwf   RamStart        ; Ensure first byte of RAM is non zero
+    movlw   endRAM          ; Address of end of RAM
+    movwf   RAM_Start       ; Ensure first byte of RAM is non zero
     movwf   FSR             ; Point indirect register to end of RAM
 
 ClearRAM
     clrf    INDF            ; Clear byte of RAM addressed by FSR
     decf    FSR,F           ; Decrement FSR to next byte of RAM
-    movf    RamStart,F      ; Test first byte of RAM
+    movf    RAM_Start,F     ; Test first byte of RAM
     btfss   STATUS,Z        ; Skip if byte of RAM now zero ...
     goto    ClearRAM        ; ... else continue to clear RAM
 

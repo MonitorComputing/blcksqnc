@@ -71,9 +71,9 @@
       </MPASMWIN-AS>
       <MPASMWIN-LD>
         <property key="cod-file" value="true"/>
-        <property key="extra-lib-directories" value=";;."/>
+        <property key="extra-lib-directories" value="."/>
         <property key="hex-output-format" value="INHX32"/>
-        <property key="map-file" value="&quot;$(BINDIR_)$(TARGETBASE).map&quot;"/>
+        <property key="map-file" value="&quot;${DISTDIR}/blcksqnc.${IMAGE_TYPE}.map&quot;"/>
       </MPASMWIN-LD>
       <Simulator>
         <property key="codecoverage.enabled" value="Disable"/>
