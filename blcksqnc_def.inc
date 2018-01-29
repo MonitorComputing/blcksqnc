@@ -74,7 +74,7 @@ INTLINKTMON EQU     25          ; Scaled interrupts, next link timeout
 ; Next controller link serial interface ports
 RXNTRIS     EQU     TRISB       ; Rx port direction register
 RXNPORT     EQU     PORTB       ; Rx port data register
-RXNBIT      EQU     1           ; Rx input bit
+RXNBIT      EQU     7           ; Rx input bit
 ;  Half duplex so Rx and Tx use same port
 TXNTRIS     EQU     RXNPORT     ; Tx port direction register
 TXNPORT     EQU     RXNPORT     ; Tx port data register
@@ -83,7 +83,7 @@ TXNBIT      EQU     RXNBIT      ; Tx output bit
 ; Previous controller link serial interface ports
 RXPTRIS     EQU     TRISB       ; Rx port direction register
 RXPPORT     EQU     PORTB       ; Rx port data register
-RXPBIT      EQU     2           ; Rx input bit
+RXPBIT      EQU     6           ; Rx input bit
 ;  Half duplex so Rx and Tx use same port
 TXPTRIS     EQU     RXPTRIS     ; Tx port direction register
 TXPPORT     EQU     RXPPORT     ; Tx port data register
@@ -117,23 +117,6 @@ RXPSTOP     EQU     7           ; Seeking stop bit
 TXPFLG      EQU     RXPFLG      ; Transmit byte buffer 'clear' status bit
 TXPBREAK    EQU     RXPBREAK    ; Send 'break' status bit
 
-; Detector I/O constants
-EMTPORT     EQU     PORTB       ; Emitter drive port
-EMTBIT      EQU     5           ; Emmitter drive bit (active low)
-SNSPORT     EQU     PORTB       ; Sensor input port
-SNSBIT      EQU     4           ; Sensor input bit (active high)
-DETPORT     EQU     PORTA       ; Detection indicator port
-DETBIT      EQU     4           ; Detection indicator bit (active low)
-
-; Latch signal 'on' input constants
-LCHBIT      EQU     0           ; Latch signal input bit (active low)
-
-; Inhibit (force display of stop aspect) input constants
-INHBIT      EQU     1           ; Inhibit input bit (active low)
-
-; Special speed input constants
-SPDBIT      EQU     3           ; Special speed input bit (active low)
-
 ; Block state values
 BLOCKCLEAR     EQU  0           ; Block clear
 TRAINENTERINGF EQU  1           ; Train entering forward
@@ -156,23 +139,36 @@ ASPSTATE    EQU     B'11000000' ; Aspect value mask
 ; Local controller status flags
 STRFLG      EQU     3           ; Exit detection stretched bit in status byte
 STRMSK      EQU     B'00001000' ; Exit detection stretched state bit mask
-
 INHFLG      EQU     4           ; Signal inhibited bit in status byte
 INHMSK      EQU     B'00010000' ; Signal inhibited state bit mask
-
 EXTFLG      EQU     5           ; Exit detection bit in status byte
 EXTMSK      EQU     B'00100000' ; Exit detection state bit mask
 
-; Previous controller status flags
+; Previous controller (received)status flags
 ENTFLG      EQU     1           ; Entrance detection bit in status byte
 ENTMSK      EQU     B'00000010' ; Entrance detection state bit mask
 
-; Next and Previous controllers status flags
+; Next and Previous controllers common (received and sent) status flags
 REVFLG      EQU     3           ; Line reversed bit in status byte
 REVMSK      EQU     B'00001000' ; Line reversed state bit mask
-
 SPDFLG      EQU     4           ; Special speed bit in status byte
 SPDMSK      EQU     B'00010000' ; Special speed state bit mask
+
+; Detector I/O constants
+EMTPORT     EQU     PORTB       ; Emitter drive port
+EMTBIT      EQU     5           ; Emmitter drive bit (active low)
+SNSPORT     EQU     PORTB       ; Sensor input port
+SNSBIT      EQU     4           ; Sensor input bit (active high)
+DETPORT     EQU     PORTA       ; Detection indicator port
+DETBIT      EQU     4           ; Detection indicator bit (active low)
+INPACTV     EQU     7           ; Correspondance accumulator >= high water bit
+
+; Input bits, PORTB
+LCHBIT      EQU     0           ; Latch stop aspect (active low)
+REVBIT      EQU     1           ; Line reversed, force stop aspect (active low)
+BIDBIT      EQU     2           ; Running line is bidirectional
+SPDBIT      EQU     3           ; Display special speed aspects (active low)
+INHBIT      EQU     7           ; Inhibit, forced stop aspect (active low)
 
 ; Aspect output constants
 ASPPORT     EQU     PORTA       ; Aspect output port
@@ -181,5 +177,3 @@ CL1MSK      EQU     B'00000010' ; Mask for clear1 aspect output bit
 CL2MSK      EQU     B'00000100' ; Mask for clear2 yellow aspect output bit
 CLRMSK      EQU     B'00001000' ; Mask for clear aspect output bit
 ASPOUTMSK   EQU     B'00001111' ; Mask for aspect output bits
-
-INPACTV     EQU     7           ; Indicates debounce accumulator > high water

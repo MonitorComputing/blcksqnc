@@ -56,10 +56,10 @@
 ;          !Detecting  <- RA4|3      16|                              *
 ;                            |4      15|                              *
 ;                            |5      14|                              *
-;     !Latch Signal On -> RB0|6      13|RB7 <- !Line reversed         *
-; Next <-> / !Inhibit  -> RB1|7      12|RB6 <- Line bidirectional     *
-;            Previous <-> RB2|8      11|RB5 -> !Emitter               *
-;      !Special speed  -> RB3|9      10|RB4 <- Sensor                 *
+;     !Latch Signal On -> RB0|6      13|RB7 <-> Next / <- !Inhibit    *
+;       !Line reversed -> RB1|7      12|RB6 <-> Previous              *
+;   Line bidirectional -> RB2|8      11|RB5 ->  !Emitter              *
+;       !Special speed -> RB3|9      10|RB4 <-  Sensor                *
 ;                            +---------+                              *
 ;                                                                     *
 ;**********************************************************************

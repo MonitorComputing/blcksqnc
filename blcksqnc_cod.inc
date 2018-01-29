@@ -230,31 +230,29 @@ Timing
     movlw   INTSCLNG        ; Reload interrupt scaling counter
     movwf   intScCount
 
-    ; Perform input debouncing
+    ; Perform input debouncing, bit state must be steady for two cycles
     ;******************************************************************
-
-    movf    PORTA,W         ; Get current port A bits
-    andlw   0xF0            ; Discard bits 0 to 3
-    movwf   FSR             ; Save current bits 4 to 7
 
     movf    PORTB,W         ; Get current port B bits
     andlw   0x0F            ; Discard bits 4 to 7
-    iorwf   FSR,F           ; Combine with saved port A bits
+    movwf   FSR,F
+    btfsc   DETPORT,DETBIT  ; Bring in detecting input, open drain output
+    bsf     FSR,DETBIT
 
-    ; First of all clear all input bits where current and last port reads match
-    ; leaving unchanged any inputs where current doesn't match last port read
-    movf    FSR,W           ; Get combined current port bits
+    ; First of all clear all input bits matching (on or off) last read
+    ; leaving unchanged any inputs bits not matching last read
+    movf    FSR,W           ; Get current read
     xorwf   debnce,W        ; Create mask for inputs changed since last read
-    andwf   inputs,F        ; Clear inputs unchanged since last read
+    andwf   inputs,F        ; Clear inputs bits unchanged since last read
 
-    ; Next set any input bits on for both current and last port read
-    ; leaving unchanged any inputs where current doesn't match last port read
+    ; Next set any input bits on for both current and last read
+    ; leaving unchanged any inputs where current doesn't match last read
     xorlw   0xFF            ; Create mask for inputs unchanged since last read
-    andwf   FSR,W           ; Get current port bits unchanged since last read
-    iorwf   inputs,F        ; Set inputs unchanged since last read
+    andwf   FSR,W           ; Get current port bits on for both reads
+    iorwf   inputs,F        ; Set inputs on for both reads
 
-    movf    FSR,W           ; Save combined current port bits ...
-    movwf   debnce          ; ... as last read value for next debounce cycle
+    movf    FSR,W           ; Save current read ...
+    movwf   debnce          ; ... as last read
 
     ; Run link reception timeouts
     ;******************************************************************

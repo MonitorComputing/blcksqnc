@@ -9,8 +9,10 @@ w_isr           ; 'w' register, accumulator, store during ISR
 pclath_isr      ; PCLATH register store during ISR
 status_isr      ; status register store during ISR
 
+
 ; Serial interface
 srlIfStat       ; Serial I/F status flags (see 'asyn_srl.inc')
+
 
 ; Next controller interface
 serNTimer       ; Interrupt counter for serial bit timing
@@ -31,6 +33,9 @@ lnkNState       ; Link state register (see 'link_hd.inc')
                 ;   bit  6 - Synchronise, Tx or Rx a break
                 ;   bit  7 - Required direction, set = Tx, clear = Rx
 
+telemNxt        ; Data previously received from next controller
+
+
 ; Previous controller interface
 serPTimer       ; Interrupt counter for serial bit timing
 serPBitCnt      ; Bit down counter
@@ -50,21 +55,35 @@ lnkPState       ; Link state register (see 'link_hd.inc')
                 ;   bit  6 - Synchronise, Tx or Rx a break
                 ;   bit  7 - Required direction, set = Tx, clear = Rx
 
+telemPrv        ; Data previously received from previous controller
+
+
+; Timing
 intScCount      ; Interrupt scaling counter for second timing
 secCount        ; Scaled interrupts counter for second timing
 
-snsAcc          ; Detector sensor match (emitter state) accumulator
+aspectTime      ; Aspect interval for simulating next signal
+nxtTimer        ; Second counter for simulating next signal
 
+
+; Inputs
 debnce          ; Previous read values used to debounce inputs
 inputs          ; Input values after debouncing:
                 ;   bit 0 - Latch signal on (active low)
-                ;   bit 1 - Inhibit, display stop aspect (active low)
+                ;   bit 1 - Line reversed (active low)
+                ;   bit 2 - Line is bidirectional, propogate line reversed
                 ;   bit 3 - Show special speed aspects (active low)
                 ;   bit 4 - Detecting (active low)
-                ;   bit 7 - Line reversed (active low)
+                ;   bit 7 - Inhibit, display stop aspect (active low)
 
+snsAcc          ; Detector sensor match (emitter state) accumulator
+
+
+; Outputs
 aspOut          ; Value indicating aspects to display (not actual ouptut)
 
+
+; Block and signal control
 lclCntlr        ; Status of this controller:
                 ;   bits 0,2 - Occupation block state
                 ;     0 - Block clear
@@ -95,10 +114,5 @@ prvCntlr        ; Status received from previous (in rear) controller:
                 ;   bits 2,3 - Ignored
                 ; Status sent to previous controller:
                 ;   bit 4    - Special speed
-                ;   bit 5    - Line reversed
+                ;   bit 5    - Line reversed, only sent if line is bidirectional
                 ;   bits 6,7 - Aspect value (bits as for this controller)
-
-aspectTime      ; Aspect interval for simulating next signal
-nxtTimer        ; Second counter for simulating next signal
-telemPrv        ; Data last received from previous controller
-telemNxt        ; Data last received from next controller
