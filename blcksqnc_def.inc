@@ -118,23 +118,20 @@ TXPFLG      EQU     RXPFLG      ; Transmit byte buffer 'clear' status bit
 TXPBREAK    EQU     RXPBREAK    ; Send 'break' status bit
 
 ; Detector I/O constants
-EMTPORT     EQU     PORTA       ; Emitter drive port
-EMTBIT      EQU     2           ; Emmitter drive bit (active low)
-SNSPORT     EQU     PORTA       ; Sensor input port
-SNSBIT      EQU     3           ; Sensor input bit (active high)
+EMTPORT     EQU     PORTB       ; Emitter drive port
+EMTBIT      EQU     5           ; Emmitter drive bit (active low)
+SNSPORT     EQU     PORTB       ; Sensor input port
+SNSBIT      EQU     4           ; Sensor input bit (active high)
 DETPORT     EQU     PORTA       ; Detection indicator port
 DETBIT      EQU     4           ; Detection indicator bit (active low)
 
 ; Latch signal 'on' input constants
-LCHPORT     EQU     PORTB       ; Latch signal input port
 LCHBIT      EQU     0           ; Latch signal input bit (active low)
 
 ; Inhibit (force display of stop aspect) input constants
-INHPORT     EQU     PORTB       ; Inhibit input port
 INHBIT      EQU     1           ; Inhibit input bit (active low)
 
 ; Special speed input constants
-SPDPORT     EQU     PORTB       ; Special speed input port
 SPDBIT      EQU     3           ; Special speed input bit (active low)
 
 ; Block state values
@@ -178,11 +175,11 @@ SPDFLG      EQU     4           ; Special speed bit in status byte
 SPDMSK      EQU     B'00010000' ; Special speed state bit mask
 
 ; Aspect output constants
-ASPPORT     EQU     PORTB       ; Aspect output port
-STPMSK      EQU     B'10000000' ; Mask for stop aspect output bit
-CL1MSK      EQU     B'01000000' ; Mask for clear1 aspect output bit
-CL2MSK      EQU     B'00100000' ; Mask for clear2 yellow aspect output bit
-CLRMSK      EQU     B'00010000' ; Mask for clear aspect output bit
-ASPOUTMSK   EQU     B'11110000' ; Mask for aspect output bits
+ASPPORT     EQU     PORTA       ; Aspect output port
+STPMSK      EQU     B'00000001' ; Mask for stop aspect output bit
+CL1MSK      EQU     B'00000010' ; Mask for clear1 aspect output bit
+CL2MSK      EQU     B'00000100' ; Mask for clear2 yellow aspect output bit
+CLRMSK      EQU     B'00001000' ; Mask for clear aspect output bit
+ASPOUTMSK   EQU     B'00001111' ; Mask for aspect output bits
 
 INPACTV     EQU     7           ; Indicates debounce accumulator > high water

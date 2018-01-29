@@ -55,11 +55,17 @@ secCount        ; Scaled interrupts counter for second timing
 
 snsAcc          ; Detector sensor match (emitter state) accumulator
 
-debnce
-inputs
-aspOut
+debnce          ; Previous read values used to debounce inputs
+inputs          ; Input values after debouncing:
+                ;   bit 0 - Latch signal on (active low)
+                ;   bit 1 - Inhibit, display stop aspect (active low)
+                ;   bit 3 - Show special speed aspects (active low)
+                ;   bit 4 - Detecting (active low)
+                ;   bit 7 - Line reversed (active low)
 
-lclCntlr        ; Status of this controller
+aspOut          ; Value indicating aspects to display (not actual ouptut)
+
+lclCntlr        ; Status of this controller:
                 ;   bits 0,2 - Occupation block state
                 ;     0 - Block clear
                 ;     1 - Train entering forward
@@ -77,17 +83,17 @@ lclCntlr        ; Status of this controller
                 ;     2 - Clear2
                 ;     3 - Clear
 
-nxtCntlr        ; Status received from next controller
-                ;   bits 0,3 - Ignored (ones complement of bits 4 to 7)
+nxtCntlr        ; Status received from next (in advance) controller:
+                ;   bits 0,3 - Ignore, reserved for bits 4 to 7 ones complement
                 ;   bit 4    - Special speed
                 ;   bit 5    - Line reversed
                 ;   bits 6,7 - Aspect value (bits as for this controller)
 
-prvCntlr        ; Status received from previous controller
+prvCntlr        ; Status received from previous (in rear) controller:
                 ;   bit 0    - Ignored
                 ;   bit 1    - Entrance detection
                 ;   bits 2,3 - Ignored
-                ; Status sent to previous controller
+                ; Status sent to previous controller:
                 ;   bit 4    - Special speed
                 ;   bit 5    - Line reversed
                 ;   bits 6,7 - Aspect value (bits as for this controller)

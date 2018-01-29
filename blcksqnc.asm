@@ -28,7 +28,7 @@
 ;                                                                     *
 ;**********************************************************************
 ;                                                                     *
-;    Copyright (C) 2017  Monitor Computing Services Ltd.              *
+;    Copyright (C) 2018  Monitor Computing Services Ltd.              *
 ;                                                                     *
 ;    This program is free software; you can redistribute it and/or    *
 ;    modify it under the terms of the GNU General Public License      *
@@ -51,15 +51,15 @@
 ;**********************************************************************
 ;                                                                     *
 ;                            +---+ +---+                              *
-;             Emitter  <- RA2|1  |_| 18|RA1                           *
-;              Sensor  -> RA3|2      17|RA0                           *
+;        Clear2 Aspect <- RA2|1  |_| 18|RA1 -> Clear1 Aspect          *
+;         Clear Aspect <- RA3|2      17|RA0 -> Stop Aspect            *
 ;          !Detecting  <- RA4|3      16|                              *
 ;                            |4      15|                              *
-;                            |5      14|      Aspects:                *
-;     !Latch Signal On -> RB0|6      13|RB7 -> Stop                   *
-; Next <-> / !Inhibit  -> RB1|7      12|RB6 -> Clear1                 *
-;            Previous <-> RB2|8      11|RB5 -> Clear2                 *
-;       Special speed  -> RB3|9      10|RB4 -> Clear                  *
+;                            |5      14|                              *
+;     !Latch Signal On -> RB0|6      13|RB7 <- !Line reversed         *
+; Next <-> / !Inhibit  -> RB1|7      12|RB6 <- Line bidirectional     *
+;            Previous <-> RB2|8      11|RB5 -> !Emitter               *
+;      !Special speed  -> RB3|9      10|RB4 <- Sensor                 *
 ;                            +---------+                              *
 ;                                                                     *
 ;**********************************************************************
