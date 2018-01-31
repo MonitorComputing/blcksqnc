@@ -84,8 +84,14 @@ aspOut          ; Value indicating aspects to display (not actual ouptut)
 
 
 ; Block and signal control
+nxtCntlr        ; Status received from next (in advance) controller:
+                ;   bits 0 - 3 - Reserved for bits 4 to 7 ones complement
+                ;   bit 4      - Special speed
+                ;   bit 5      - Line reversed
+                ;   bits 6,7   - Aspect value (bits as for this controller)
+
 lclCntlr        ; Status of this controller:
-                ;   bits 0,2 - Occupation block state
+                ;   bits 0 - 2 - Occupation block state
                 ;     0 - Block clear
                 ;     1 - Train entering forward
                 ;     2 - Train in block
@@ -93,20 +99,14 @@ lclCntlr        ; Status of this controller:
                 ;     4 - Train spanning block
                 ;     5 - Train entering reverse
                 ;     6 - Train leaving reverse
-                ;   bit 3    - Exit detection stretched
-                ;   bit 4    - Signal inhibit (display red aspect)
-                ;   bit 5    - Exit detection
-                ;   bits 6,7 - Aspect value
+                ;   bit 3      - Exit detection stretched
+                ;   bit 4      - Signal inhibit (display red aspect)
+                ;   bit 5      - Exit detection
+                ;   bits 6,7   - Aspect value
                 ;     0 - Stop
                 ;     1 - Clear1
                 ;     2 - Clear2
                 ;     3 - Clear
-
-nxtCntlr        ; Status received from next (in advance) controller:
-                ;   bits 0,3 - Ignore, reserved for bits 4 to 7 ones complement
-                ;   bit 4    - Special speed
-                ;   bit 5    - Line reversed
-                ;   bits 6,7 - Aspect value (bits as for this controller)
 
 prvCntlr        ; Status received from previous (in rear) controller:
                 ;   bit 0    - Ignored

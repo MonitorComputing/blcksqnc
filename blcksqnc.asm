@@ -51,9 +51,9 @@
 ;**********************************************************************
 ;                                                                     *
 ;                            +---+ +---+                              *
-;        Clear2 Aspect <- RA2|1  |_| 18|RA1 -> Clear1 Aspect          *
-;         Clear Aspect <- RA3|2      17|RA0 -> Stop Aspect            *
-;          !Detecting  <- RA4|3      16|                              *
+;       Clear2 Aspect  <- RA2|1  |_| 18|RA1 -> Clear1 Aspect          *
+;        Clear Aspect  <- RA3|2      17|RA0 -> Stop Aspect            *
+;          !Detecting <-> RA4|3      16|                              *
 ;                            |4      15|                              *
 ;                            |5      14|                              *
 ;     !Latch Signal On -> RB0|6      13|RB7 <-> Next / <- !Inhibit    *

@@ -52,8 +52,8 @@ RAM_Start   EQU     0x0C
 RAM_End     EQU     0x4F
 
 ; I/O port direction masks
-PORTASTATUS EQU     B'00001000'
-PORTBSTATUS EQU     B'00001011'
+PORTASTATUS EQU     B'00000000'
+PORTBSTATUS EQU     B'00011111'
 
 ; Interrupt & timing constants
 RTCCINT     EQU     160         ; 10KHz = ((4MHz / 4) / 100) (0.1 mSec tick)
@@ -154,14 +154,13 @@ REVMSK      EQU     B'00001000' ; Line reversed state bit mask
 SPDFLG      EQU     4           ; Special speed bit in status byte
 SPDMSK      EQU     B'00010000' ; Special speed state bit mask
 
-; Detector I/O constants
-EMTPORT     EQU     PORTB       ; Emitter drive port
-EMTBIT      EQU     5           ; Emmitter drive bit (active low)
-SNSPORT     EQU     PORTB       ; Sensor input port
-SNSBIT      EQU     4           ; Sensor input bit (active high)
-DETPORT     EQU     PORTA       ; Detection indicator port
-DETBIT      EQU     4           ; Detection indicator bit (active low)
-INPACTV     EQU     7           ; Correspondance accumulator >= high water bit
+; Aspect output constants
+ASPPORT     EQU     PORTA       ; Aspect output port
+STPMSK      EQU     B'00000001' ; Mask for stop aspect output bit
+CL1MSK      EQU     B'00000010' ; Mask for clear1 aspect output bit
+CL2MSK      EQU     B'00000100' ; Mask for clear2 yellow aspect output bit
+CLRMSK      EQU     B'00001000' ; Mask for clear aspect output bit
+ASPOUTMSK   EQU     B'00001111' ; Mask for aspect output bits
 
 ; Input bits, PORTB
 LCHBIT      EQU     0           ; Latch stop aspect (active low)
@@ -170,10 +169,11 @@ BIDBIT      EQU     2           ; Running line is bidirectional
 SPDBIT      EQU     3           ; Display special speed aspects (active low)
 INHBIT      EQU     7           ; Inhibit, forced stop aspect (active low)
 
-; Aspect output constants
-ASPPORT     EQU     PORTA       ; Aspect output port
-STPMSK      EQU     B'00000001' ; Mask for stop aspect output bit
-CL1MSK      EQU     B'00000010' ; Mask for clear1 aspect output bit
-CL2MSK      EQU     B'00000100' ; Mask for clear2 yellow aspect output bit
-CLRMSK      EQU     B'00001000' ; Mask for clear aspect output bit
-ASPOUTMSK   EQU     B'00001111' ; Mask for aspect output bits
+; Detector I/O constants
+EMTPORT     EQU     PORTB       ; Emitter drive port
+EMTBIT      EQU     5           ; Emmitter drive bit (active low)
+SNSPORT     EQU     PORTB       ; Sensor input port
+SNSBIT      EQU     4           ; Sensor input bit (active high)
+DETPORT     EQU     PORTA       ; Detection indicator port
+DETBIT      EQU     4           ; Detection indicator bit (active low)
+INPACTV     EQU     7           ; Correspondance accumulator >= high water bit

@@ -234,8 +234,8 @@ Timing
     ;******************************************************************
 
     movf    PORTB,W         ; Get current port B bits
-    andlw   0x0F            ; Discard bits 4 to 7
-    movwf   FSR,F
+    andlw   0x8F            ; Discard bits 4 to 6
+    movwf   FSR
     btfsc   DETPORT,DETBIT  ; Bring in detecting input, open drain output
     bsf     FSR,DETBIT
 
