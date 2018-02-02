@@ -59,7 +59,7 @@ telemPrv        ; Data previously received from previous controller
 
 
 ; Timing
-intScCount      ; Interrupt scaling counter for second timing
+intScCount      ; Interrupt counter for scaled timing
 secCount        ; Scaled interrupts counter for second timing
 
 aspectTime      ; Aspect interval for simulating next signal
@@ -71,7 +71,7 @@ debnce          ; Previous read values used to debounce inputs
 inputs          ; Input values after debouncing:
                 ;   bit 0 - Latch signal on (active low)
                 ;   bit 1 - Line reversed (active low)
-                ;   bit 2 - Line is bidirectional, propogate line reversed
+                ;   bit 2 - Line is bidirectional, else suppress line reversed
                 ;   bit 3 - Show special speed aspects (active low)
                 ;   bit 4 - Detecting (active low)
                 ;   bit 7 - Inhibit, display stop aspect (active low)
@@ -80,15 +80,19 @@ snsAcc          ; Detector sensor match (emitter state) accumulator
 
 
 ; Outputs
-aspOut          ; Value indicating aspects to display (not actual ouptut)
+aspVal          ; Value indicating aspects to display (not actual ouptut)
 
 
 ; Block and signal control
 nxtCntlr        ; Status received from next (in advance) controller:
-                ;   bits 0 - 3 - Reserved for bits 4 to 7 ones complement
+                ;   bits 0 - 3 - Ignored bits 4 to 7 ones complement
                 ;   bit 4      - Special speed
                 ;   bit 5      - Line reversed
-                ;   bits 6,7   - Aspect value (bits as for this controller)
+                ;   bits 6,7   - Aspect value
+                ;     0 - Stop
+                ;     1 - Clear1
+                ;     2 - Clear2
+                ;     3 - Clear
 
 lclCntlr        ; Status of this controller:
                 ;   bits 0 - 2 - Occupation block state
@@ -100,19 +104,10 @@ lclCntlr        ; Status of this controller:
                 ;     5 - Train entering reverse
                 ;     6 - Train leaving reverse
                 ;   bit 3      - Exit detection stretched
-                ;   bit 4      - Signal inhibit (display red aspect)
-                ;   bit 5      - Exit detection
+                ;   bit 4      - Exit detection
+                ;   bit 5      - Entry detection (Exit detection from previous)
                 ;   bits 6,7   - Aspect value
                 ;     0 - Stop
                 ;     1 - Clear1
                 ;     2 - Clear2
                 ;     3 - Clear
-
-prvCntlr        ; Status received from previous (in rear) controller:
-                ;   bit 0    - Ignored
-                ;   bit 1    - Entrance detection
-                ;   bits 2,3 - Ignored
-                ; Status sent to previous controller:
-                ;   bit 4    - Special speed
-                ;   bit 5    - Line reversed, only sent if line is bidirectional
-                ;   bits 6,7 - Aspect value (bits as for this controller)

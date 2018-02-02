@@ -57,12 +57,13 @@ RunISR
     decfsz  intScCount,W    ; Decrement interrupt scaling counter into W
     movwf   intScCount      ; If result is not zero update the counter
 
-    ; Run detector
+    ; Run train detection
     ;******************************************************************
 
-    ; Detector is designed to float at 2.5V, just above TTL off threshold
-    ; so will be on if no train present or emitter is on. Will only be off
-    ; when train is present and emitter is off.
+    ; Detector is designed to float at 2.5V, just above TTL off threshold and
+    ; filtered to ignore low frequency signals in order to reject ambient light
+    ; sources. Hence will be on if no train present or emitter is on and will
+    ; only be off when train is present and emitter is off.
 
     btfss   EMTPORT,EMTBIT  ; Skip is emitter is off (active low)...
     goto    EmitterOn       ; ... else ignore sensor
@@ -73,14 +74,19 @@ EmitterOff
 
 SensorOff
     ; Sensing presence of train
-    incfsz  snsAcc,W        ; Increment sensor match accumulator into W
+    incf    snsAcc,W        ; Increment sensor match accumulator into W
     movwf   snsAcc          ; If result is not zero update the accumulator
+    btfsc   snsAcc,INPACTV  ; Skip if below on threshold ...
+    bcf     DETPORT,DETBIT  ; ... else turn detector indicator on (active low)
     goto    EmitterOffEnd
 
 SensorOn
     ; Detecting absence of train
-    decfsz  snsAcc,W        ; Decrement sensor match accumulator into W
-    movwf   snsAcc          ; If result is not zero update the accumulator
+    decf    snsAcc,W        ; Decrement sensor match accumulator into W
+    btfss   STATUS,Z        ; Skip if result is zero ...
+    movwf   snsAcc          ; ... else update the accumulator
+    btfsc   STATUS,Z        ; Skip if above off threshold ...
+    bsf     DETPORT,DETBIT  ; ... else turn detector indicator off (active low)
 
 EmitterOffEnd
     bcf     EMTPORT,EMTBIT  ; Turn emitter on (active low)
@@ -91,13 +97,13 @@ EmitterOn
 
 SensorEnd
 
-    ; Output aspect display
+    ; Output aspect display without altering non aspect bits on port
     ;******************************************************************
 
-    call    GetAspectMask
-    iorwf   ASPPORT,F
-    iorlw   ~ASPOUTMSK
-    andwf   ASPPORT,F
+    call    GetAspectOutput
+    iorwf   ASPPORT,F       ; Set relevant aspect output bits
+    iorlw   ~ASPOUTMSK      ; Protect non aspect output bits
+    andwf   ASPPORT,F       ; Clear relevant aspect output bits
 
     ; End Interrupt Service Routine
     ;******************************************************************
@@ -205,9 +211,11 @@ ClearRAM
     bsf     INTCON,T0IE     ; Enable TMR0 interrupts
     bsf     INTCON,GIE      ; Enable interrupts
 
-    ;******************************************************************
-    ; Top of main processing loop
-    ;******************************************************************
+
+;******************************************************************
+; Top of main processing loop
+;******************************************************************
+
 Main
     clrwdt                  ; Reset the watchdog timer
 
@@ -227,14 +235,14 @@ Timing
     decfsz  intScCount,W    ; Test interrupts scaling counter
     goto    TimingEnd       ; Skip if a interrupt scaling has not elapsed
 
-    movlw   INTSCLNG        ; Reload interrupt scaling counter
-    movwf   intScCount
+    movlw   INTSCLNG        ; Reload interrupt ...
+    movwf   intScCount      ; ...  scaling counter
 
     ; Perform input debouncing, bit state must be steady for two cycles
     ;******************************************************************
 
     movf    PORTB,W         ; Get current port B bits
-    andlw   0x8F            ; Discard bits 4 to 6
+    andlw   INPMSK          ; Isolate input bits
     movwf   FSR
     btfsc   DETPORT,DETBIT  ; Bring in detecting input, open drain output
     bsf     FSR,DETBIT
@@ -257,13 +265,11 @@ Timing
     ; Run link reception timeouts
     ;******************************************************************
 
-    decf    lnkPTimer,W     ; Check previous controller link reception timeout
-    btfss   STATUS,Z        ; Skip if link timedout ...
-    movwf   lnkPTimer       ; ... else update timeout counter
+    decfsz  lnkPTimer,W     ; Check previous controller link reception timeout
+    movwf   lnkPTimer       ; Update timeout counter if not yet timed out
 
-    decf    lnkNTimer,W     ; Check next controller link reception timeout
-    btfss   STATUS,Z        ; Skip if link timedout ...
-    movwf   lnkNTimer       ; ... else update timeout counter
+    decfsz  lnkNTimer,W     ; Check next controller link reception timeout
+    movwf   lnkNTimer       ; Update timeout counter if not yet timed out
 
     ; Run one second timing
     ;******************************************************************
@@ -272,10 +278,10 @@ Timing
     goto    TimingEnd       ; ... skipping this jump if it has reached zero
 
     movlw   SECSCLNG        ; Reload one second ...
-    movwf   secCount        ; ... scaled interrupts counter low byte
+    movwf   secCount        ; ... scaled interrupts counter
 
     decfsz  nxtTimer,W      ; Decrement next signal simulation timer into W
-    movwf   nxtTimer        ; If result is not zero update the timer
+    movwf   nxtTimer        ; Update timeout counter if not yet timed out
 
     ; Check status of train detection input (active low) for off
     ; (this is only done once a second so detection can be stretched to
@@ -292,16 +298,6 @@ Timing
 
 TimingEnd
 
-    ; Check status of train detector
-    ;******************************************************************
-
-    decf    snsAcc,W        ; Test detector correspondence accumulator
-    btfsc   STATUS,Z        ; Skip if above off threshold ...
-    bsf     DETPORT,DETBIT  ; ... else turn detector indicator off (active low)
-
-    btfsc   snsAcc,INPACTV  ; Skip if below on threshold ...
-    bcf     DETPORT,DETBIT  ; ... else turn detector indicator on (active low)
-
     ; Check status of train detection input (active low) for on
     ;******************************************************************
 
@@ -310,13 +306,307 @@ TimingEnd
     btfss   inputs,DETBIT   ; Skip if detection input is off (active low) ...
     bcf     lclCntlr,STRFLG ; ... else clear exit detection stretched flag
 
-    ; Check status of special speed input (active low)
+
+    ; Service link with next controller
     ;******************************************************************
 
-    btfsc   inputs,SPDBIT   ; Skip if special speed is on (active low) ...
-    bcf     prvCntlr,SPDFLG ; ... else set speed state to normal
-    btfss   inputs,SPDBIT   ; Skip if special speed is off (active low) ...
-    bsf     prvCntlr,SPDFLG ; ... else set speed state to special
+    btfss   lnkNState,LNKDIRFLG ; Skip if replying to next controller ...
+    goto    CheckNextRx         ; ... else skip over next controller send
+
+    ; Send status reply to next controller
+    ;******************************************************************
+
+    movf    lclCntlr,W      ; Get local controller status
+
+    ; Only four bits of status (aspect value, entry and exit detection) are
+    ; sent so as a simple error check these are sent in low nibble with ones
+    ; complement in high nibble
+
+    iorlw   0x0F            ; Status bits - high nibble, 0x0F - low nibble
+
+    movwf   FSR             ; Copy status bits - high nibble, 0x0F - low nibble
+    swapf   FSR,F           ; Swap, 0xF - high nibble, status bits - low nibble
+
+    andlw   0xF0            ; Status bits - high nibble, 0 - low nibble
+    xorwf   FSR,F           ; Complemented high nibble, original low nibble
+
+    call    LinkTxN         ; Send data to next controller
+    btfss   STATUS,Z        ; Skip if data sent ...
+    goto    NextLinkEnd     ; ... else continue trying to send
+
+    bcf     lnkNState,LNKDIRFLG ; Resume listening to next controller
+
+CheckNextRx
+    ; Look for status received from next controller
+    ;******************************************************************
+
+    call    LinkRxN         ; Check for data from next controller
+    btfss   STATUS,Z        ; Skip if data received ...
+    goto    NextRxEnd       ; ... else skip over next controller receive
+
+    movwf   FSR             ; Save the received data
+
+    ; As a simple error check received data is ignored unless same value
+    ; received twice in succession
+
+    xorwf   telemNxt,F      ; Test against last received data
+    movwf   telemNxt        ; Replace last received data
+    btfss   STATUS,Z        ; Skip if last and just received data match ...
+    goto    NextLinkEnd     ; ... else ignore just received data
+
+    ; Only four bits of status (aspect value, line reversed, and special speed)
+    ; are received so as a simple error check these are sent in low nibble with
+    ; ones complement in high nibble.
+
+    swapf   FSR,W           ; Status bits - high nibble, complement - low nibble
+    comf    FSR,F           ; Complement - high nibble, status bits - low nibble
+    xorwf   FSR,F           ; Exclusive or received data with complement
+    btfss   STATUS,Z        ; Skip if result is zero, i.e. data is ok ...
+    goto    NextLinkEnd     ; ... else ignore received data
+
+    movwf   nxtCntlr        ; Save received data as next controller status
+
+    bsf     lnkNState,LNKDIRFLG ; Start replying to next controller
+
+    MaxLw   INTLINKTMON, 1
+    movwf   lnkNTimer       ; Reset link reception timeout
+
+    goto    NextLinkEnd
+
+NextRxEnd
+
+    ; Test if next controller link has timedout
+    ;******************************************************************
+
+    decf    lnkNTimer,W     ; Check link reception timeout
+    btfsc   STATUS,Z        ; Skip if link not timedout ...
+    goto    NextLinkFailed  ; ... else handle link failure
+
+    ; Signal inhibit input cannot be read until link has timed out
+    bsf     inputs,INHBIT   ; Set inhibit input off (active low)
+    bsf     debnce,INHBIT   ; Set inhibit input debounce off (active low)
+
+    goto    NextLinkEnd     ; ... else keep waiting for data
+
+
+NextLinkFailed
+    ; Next controller link timed out, simulate next signal sequencing
+    ;******************************************************************
+
+    bcf     nxtCntlr,REVFLG ; Clear next block line reversed flag
+    bcf     nxtCntlr,SPDFLG ; Clear next signal special speed flag
+
+    btfsc   inputs,REVBIT   ; Ignore detection if line reversed (active low) ...
+    btfsc   inputs,DETBIT   ; ... skip if exit detection is on (active low) ...
+    goto    RunNextSignal   ; ... else run next signal simulation
+
+    ; Reset next signal aspect value to stop and reset the aspect timer to
+    ; simulate train traversing next block
+    movlw   ~ASPSTATE
+    andwf   nxtCntlr,F
+    goto    TimeNextSignal
+
+RunNextSignal
+    decfsz  nxtTimer,W      ; Test if aspect timer elapsed ...
+    goto    NextLinkEnd     ; ... else skip next signal sequencing
+
+    ; Simulate signal changing aspect
+    movlw   ASPINCR
+    addwf   nxtCntlr,W      ; Increment to next aspect value
+    btfss   STATUS,C        ; Skip if overflow, already showing clear aspect ...
+    movwf   nxtCntlr        ; ... else store new aspect value
+
+TimeNextSignal
+    ; Load aspect timer for the duration of the new aspect
+    movf    aspectTime,W
+    movwf   nxtTimer
+
+NextLinkEnd
+
+    ; Next controller may propogate its line reversed and special speed
+    ;******************************************************************
+
+    btfsc   nxtCntlr,REVFLG ; Pick up line reversal from next controller
+    bcf     inputs,REVBIT   ; ... set line reversed (active low)
+    btfss   inputs,BIDBIT   ; Skip if line bidirectional ...
+    bsf     inputs,REVBIT   ; ... else suppress line reversed (active low)
+
+    btfsc   nxtCntlr,SPDFLG ; Pick up special speed from next controller
+    bcf     inputs,SPDBIT   ; Set special speed (active low)
+
+
+    ; Run this occupation block state machine
+    ;******************************************************************
+
+    ; The signal aspect for this block is dependent on the aspect of the next
+    ; signal but for the purpose of this block it doesn't matter if these have
+    ; been received or simulated.
+
+    movlw   high BlockTable ; Load jump table address high byte ...
+    movwf   PCLATH          ; ... into PCLATH to make jump in same code block
+    movf    lclCntlr,W      ; Use current state value ...
+
+BlockStateJump
+    andlw   BLKSTATE        ; ... (after removing flag and aspect bits) ...
+    addwf   PCL,F           ; ... as offset into state jump table
+
+BlockTable
+    goto    BlockClear      ; State 0 - Block clear
+    goto    TrainEnteringF  ; State 1 - Train entering forward
+    goto    TrainInBlock    ; State 2 - Train in block
+    goto    TrainLeavingF   ; State 3 - Train leaving forward
+    goto    TrainSpansBlock ; State 4 - Train spanning block
+    goto    TrainEnteringR  ; State 5 - Train entering reverse
+    goto    TrainLeavingR   ; State 6 - Train leaving reverse
+    goto    BlockEnd        ; State 7 - Unused
+
+#if (high BlockTable) != (high $)
+    error "Block state jump table spans 8 bit boundary"
+#endif
+
+NewBlkState
+    iorwf   lclCntlr,F      ; Set at least the desired state
+    iorlw   ~BLKSTATE       ; Protect non state bits
+    andwf   lclCntlr,F      ; Narrow to the desired state
+    goto    BlockStateJump  ; Go directly to the new state
+
+
+BlockClear      ; State 0 - Block clear
+
+CheckNtrRev
+    ; Check for train entering in reverse
+    movlw   TRAINENTERINGR  ; Possible next state
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    goto    NewBlkState     ; ... else train entering in reverse, change state
+
+CheckNtrFwd
+    ; Check for train entering forwards
+    btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
+    goto    BlockEnd        ; ... else remain in current state
+
+    ; Train at block entrance,
+    ; next state = 1 - Train entering forward,
+    incf    lclCntlr,F      ; Roll through to next state
+
+
+TrainEnteringF  ; State 1 - Train entering forward
+
+ChkSpnFwd
+    ; Check if train now spans this block
+    movlw   BLOCKSPANNED    ; Possible next state
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    goto    NewBlkState     ; ... else train now spans this block, change state
+
+CheckOccFwd
+    ; Check if train now occupies this block
+    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
+    goto    BlockEnd        ; ... else remain in current state
+
+    ; Train no longer at block entrance,
+    ; next state = 2 - Train in block
+    incf    lclCntlr,F      ; Roll through to next state
+
+
+TrainInBlock   ; State 2 - Train in block
+
+CheckExtRev
+    ; Check for train exiting in reverse
+    movlw   TRAINLEAVINGR   ; Possible next state
+    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
+    goto    NewBlkState     ; ... else train exiting in reverse, change state
+
+CheckExtFwd
+    btfss   lclCntlr,EXTFLG ; Skip if exit detection on ...
+    goto    BlockEnd        ; ... else remain in current state
+
+    ; Train detected at block exit,
+    ; next state = 3 - Train leaving forward
+    incf    lclCntlr,F      ; Roll through to next state
+
+
+TrainLeavingF   ; State 3 - Train leaving forward
+
+    ; Check if train has left block
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    goto    ChkTrnRvd       ; ... else check if train now spans this block
+
+    ; Train no longer at block exit,
+    ; next state = 0 - Block clear
+    movlw   BLOCKCLEAR      ; Next state
+    goto    NewBlkState     ; Change state
+
+ChkTrnRvd
+    ; Check if train has changed direction and now spans this block
+    btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
+    goto    BlockEnd    ; ... else remain in current state
+
+    bcf     inputs,REVBIT   ; Set line reversed (active low)
+
+    ; Train detected at block entrance,
+    ; next state = 4 - Train spanning block
+    incf    lclCntlr,F      ; Roll through to next state
+
+
+TrainSpansBlock    ; State 4 - Train spanning block
+
+CheckTrvFwd
+    ; Check for train traversal of block forwards
+    movlw   TRAINLEAVINGF   ; Possible next state
+    btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
+    goto    NewBlkState     ; ... else train is leaving forwards, change state
+
+CheckTrvRev
+    ; Check for train traversal of block in reverse
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    goto    BlockEnd    ; ... else remain in current state
+
+    ; Train no longer at block exit,
+    ; next state = 6 - Train leaving reverse
+    movlw   TRAINLEAVINGR   ; Next state
+    goto    NewBlkState
+
+
+TrainEnteringR  ; State 5 - Train entering reverse
+
+    bcf     inputs,REVBIT   ; Set line reversed (active low)
+
+ChkSpnRev
+    ; Check if train now spans this block
+    movlw   BLOCKSPANNED    ; Possible next state
+    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
+    goto    NewBlkState     ; ... else train at block entrance, change state
+
+CheckOccRev
+    ; Check if train now occupies this block
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    goto    BlockEnd    ; ... else remain in current state
+
+    ; Train no longer at block exit,
+    ; next state = 2 - Train in block
+    movlw   BLOCKOCCUPIED   ; Next state
+    goto    NewBlkState
+
+
+TrainLeavingR   ; State 6 - Train leaving reverse
+
+    bcf     inputs,REVBIT   ; Set line reversed (active low)
+
+    ; Check if train has changed direction and now spans this block
+    movlw   BLOCKSPANNED    ; Possible next state
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    goto    NewBlkState     ; ... else train at block exit, change state
+
+    ; Check if train has left block
+    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
+    goto    BlockEnd        ; ... else remain in current state
+
+    ; Train no longer at block entrance,
+    ; next state = 0 - Block clear
+    movlw   BLOCKCLEAR      ; Next state
+    goto    NewBlkState     ; Change State
+
+BlockEnd    ; End of signal block state machine
+
 
     ; Service link with previous controller
     ;******************************************************************
@@ -327,21 +617,39 @@ TimingEnd
     ; Send status to previous controller
     ;******************************************************************
 
-    ; Only four bits of signalling status need to be sent so as a simple error
-    ; check these are sent in low nibble with ones complement in high nibble
+    ; This block's signal aspect value (displayed by previous controller)
+    ; depends on the aspect value of the local signal, unless the line is
+    ; reversed or the block is occupied (not clear).
 
-    movf    prvCntlr,W      ; Get status for previous controller
+    movlw   BLKSTATE
+    andwf   lclCntlr,W      ; Test block state
+    btfss   STATUS,Z        ; Skip if block clear ...
+    goto    SendStopSignal  ; ... else signal for block displays stop
 
-    btfsc   nxtCntlr,REVFLG ; Test if next block line reversed flag is set ...
-    iorlw   REVMSK          ; ... if so propagate this to previous controller
+    movlw   ASPINCR         ; Increment aspect value ...
+    addwf   lclCntlr,W      ; ... of local signal into W
+    btfsc   STATUS,C        ; Skip if no overflow ...
+    movlw   ASPCLR          ; ... else send clear aspect
 
-    iorlw   0x0F            ; Set up for ones complement high nibble later
+SendStopSignal
+    andlw   ASPSTATE        ; Clear bits other than aspect value to send
+    btfss   inputs,REVBIT   ; Skip if line not reversed (active low) ...
+    movlw   REVMSK          ; ... else propagate this and send stop aspect
 
-    movwf   FSR             ; Save local signalling status
-    swapf   FSR,F           ; Swap nibbles, signalling status - low, 0xF - high
+    btfss   inputs,SPDBIT   ; Skip if not special speed (active low) ...
+    iorlw   SPDMSK          ; ... else propagate this to previous controller
 
-    andlw   0xF0            ; Isolate signalling status for ones complement
-    xorwf   FSR,F           ; Ones complement high and signalling status in low
+    ; Only four bits of status (aspect value, line reversed, and special speed)
+    ; are sent so as a simple error check these are sent in low nibble with
+    ; ones complement in high nibble.
+
+    iorlw   0x0F            ; Status bits - high nibble, 0x0F - low nibble
+
+    movwf   FSR             ; Copy status bits - high nibble, 0x0F - low nibble
+    swapf   FSR,F           ; Swap, 0xF - high nibble, status bits - low nibble
+
+    andlw   0xF0            ; Status bits - high nibble, 0 - low nibble
+    xorwf   FSR,F           ; Complemented high nibble, original low nibble
 
     call    LinkTxP         ; Send data to previous block
     btfss   STATUS,Z        ; Skip if data was sent ...
@@ -374,141 +682,32 @@ CheckPrevRx
     btfss   STATUS,Z        ; Skip if last and just received data match ...
     goto    PrevLinkEnd     ; ... else ignore just received data
 
-    ; Only four bits of signalling status need to be sent so as a simple error
-    ; check these are sent in low nibble with ones complement in high nibble
+    ; Only four bits of status (aspect value, entry and exit detection) are
+    ; received so as a simple error check these are sent in low nibble with ones
+    ; complement in high nibble
 
-    movf    FSR,W           ; Signalling in low nibble, ones complement in high
-    swapf   FSR,F           ; Swap nibbles of the received data
-    comf    FSR,F           ; Ones complement the swapped received data
-    xorwf   FSR,F           ; Exclusive or complemented and swapped data
+    swapf   FSR,W           ; Status bits - high nibble, complement - low nibble
+    comf    FSR,F           ; Complement - high nibble, status bits - low nibble
+    xorwf   FSR,F           ; Exclusive or received data with complement
     btfss   STATUS,Z        ; Skip if result is zero, i.e. data is ok ...
     goto    PrevLinkEnd      ; ... else ignore just received data
 
-    andlw   0x0F            ; Clear ones complement from received data
-    iorwf   prvCntlr,F      ; OR received data into previous controller status
-    iorlw   0xF0            ; Protect high nibble of controller status
-    andwf   prvCntlr,F      ; Mask received data in previous controller status
+    ; Only interested in previous exit detection as local entry detection
+    bcf     lclCntlr,ENTFLG ; Assume entry detector is off
+    andlw   EXTMSK          ; Test previous controller exit detector
+    btfss   STATUS,Z        ; Skip if previous exit detector is off ...
+    bsf     lclCntlr,ENTFLG ; ... else entry detector is on
 
 PrevRxDone
     bsf     lnkPState,LNKDIRFLG ; Resume sending to previous controller
 
 PrevLinkEnd
 
-    ; Service link with next controller
+    ; Process local signal aspect display
     ;******************************************************************
 
-    btfss   lnkNState,LNKDIRFLG ; Skip if replying to next controller ...
-    goto    CheckNextRx         ; ... else skip over next controller send
-
-    ; Send status reply to next controller
-    ;******************************************************************
-
-    ; Only four bits of signalling status need to be sent so as a simple error
-    ; check these are sent in low nibble with ones complement in high nibble
-
-    movf    lclCntlr,W      ; Get local controller status
-
-    iorlw   0x0F            ; Set up for ones complement high nibble later
-
-    movwf   FSR             ; Save local signalling status
-    swapf   FSR,F           ; Swap nibbles, signalling status - low, 0xF - high
-
-    andlw   0xF0            ; Isolate signalling status for ones complement
-    xorwf   FSR,F           ; Ones complement high and signalling status in low
-
-    call    LinkTxN         ; Send data to next controller
-    btfss   STATUS,Z        ; Skip if data sent ...
-    goto    NextLinkEnd     ; ... else continue trying to send
-
-    bcf     lnkNState,LNKDIRFLG ; Resume listening to next controller
-
-CheckNextRx
-    ; Look for status received from next controller
-    ;******************************************************************
-
-    call    LinkRxN         ; Check for data from next controller
-    btfss   STATUS,Z        ; Skip if data received ...
-    goto    NextRxEnd       ; ... else skip over next controller receive
-
-    movwf   FSR             ; Store the received data
-
-    ; As a simple error check received data is ignored unless same value
-    ; received twice in succession
-
-    xorwf   telemNxt,F      ; Test against last received data
-    movwf   telemNxt        ; Replace last received data
-    btfss   STATUS,Z        ; Skip if last and just received data match ...
-    goto    NextLinkEnd     ; ... else ignore just received data
-
-    ; Only four bits of signalling status need to be sent so as a simple error
-    ; check these are sent in low nibble with ones complement in high nibble
-
-    swapf   FSR,W           ; Signalling in high nibble, ones complement in low
-    comf    FSR,F           ; Ones complement the received data
-    xorwf   FSR,F           ; Exclusive or complemented and swapped data
-    btfss   STATUS,Z        ; Skip if result is zero, i.e. data is ok ...
-    goto    NextLinkEnd     ; ... else ignore received data
-
-    movwf   nxtCntlr        ; Save received data as next controller status
-
-    bsf     lnkNState,LNKDIRFLG ; Start replying to next controller
-
-    MaxLw   INTLINKTMON, 1
-    movwf   lnkNTimer       ; Reset link reception timeout
-
-    goto    NextLinkEnd
-
-NextRxEnd
-
-    ; Test if next controller link has timedout
-    ;******************************************************************
-
-    decf    lnkNTimer,W     ; Check link reception timeout
-    btfsc   STATUS,Z        ; Skip if link not timedout ...
-    goto    NextLinkFailed  ; ... else handle link failure
-
-    ; Signal inhibit input cannot be read until link has timed out
-    bcf     lclCntlr,INHFLG
-    bsf     inputs,INHBIT
-    bsf     debnce,INHBIT
-
-    goto    NextLinkEnd     ; ... else keep waiting for data
-
-
-NextLinkFailed
-    ; Next controller link timed out, simulate it
-    ;******************************************************************
-
-    bcf     nxtCntlr,REVFLG ; Clear next block line reversed flag
-    bcf     nxtCntlr,SPDFLG ; Clear next signal special speed flag
-
-    decfsz  nxtTimer,W      ; Test if aspect timer elapsed ...
-    goto    NextSignalEnd   ; ... else skip next signal sequencing
-
-    ; Simulate signal changing aspect
-    movlw   ASPINCR
-    addwf   nxtCntlr,W      ; Increment to next aspect value
-    btfss   STATUS,C        ; Skip if overflow, already showing 'green' ...
-    movwf   nxtCntlr        ; ... else store new aspect value
-
-    ; Load aspect timer for the duration of the new aspect
-    movf    aspectTime,W
-    movwf   nxtTimer
-
-NextSignalEnd
-
-    ; Next controller link timed out, check signal inhibit input (active low)
-    ;******************************************************************
-
-    btfsc   inputs,INHBIT   ; Skip if inhibit input is on (active low) ...
-    bcf     lclCntlr,INHFLG ; ... else set signal inhibit to off
-    btfss   inputs,INHBIT   ; Skip if inhibit input is off (active low) ...
-    bsf     lclCntlr,INHFLG ; ... else set signal inhibit to on
-
-NextLinkEnd
-
-    ; Unless the local signal is inhibited or latched this controller normally
-    ; displays the signal aspect for the next block (received or simulated)
+    ; Unless the local signal is latched or inhibited this controller displays
+    ; the signal aspect for the next block
 
     movlw   ASPSTATE
     andwf   lclCntlr,W      ; Test local signal aspect value
@@ -516,229 +715,21 @@ NextLinkEnd
     goto    SetLocalAspect  ; ... otherwise set local aspect
 
     btfss   inputs,LCHBIT   ; Skip if latch input is off (active low) ...
-    goto    SkipLocalAspect ; ... otherwise skip setting local aspect
+    goto    LocalAspectDone ; ... otherwise leave local aspect = stop
 
 SetLocalAspect
     movlw   ~ASPSTATE
-    andwf   lclCntlr,F      ; Clear local signal aspect value bits
+    andwf   lclCntlr,F      ; Clear local signal aspect value bits (= stop)
+
+    btfss   inputs,INHBIT   ; Skip if signal is not inhibited (active low) ...
+    goto    LocalAspectDone ; ... otherwise leave local aspect = stop
 
     movlw   ASPSTATE
-    andwf   nxtCntlr,W      ; Get local signal aspect from next controller
+    andwf   nxtCntlr,W      ; Get local signal aspect from next controller ...
+    iorwf   lclCntlr,F      ; ... for local display
 
-    btfss   lclCntlr,INHFLG ; Skip if signal is inhibited ...
-    iorwf   lclCntlr,F      ; ... else use the signal aspect for display
-
-SkipLocalAspect
-
-    ; This block's signal aspect value (displayed by previous controller)
-    ; depends on the aspect value of the local signal.
-
-    movlw   ~ASPSTATE
-    andwf   prvCntlr,F      ; Clear signal aspect value bits (= stop aspect)
-
-    movlw   ASPINCR
-    addwf   lclCntlr,W      ; Increment local signal aspect value into W
-    btfsc   STATUS,C        ; Skip if no overflow ...
-    movlw   ASPCLR          ; ... else set for clear aspect
-    andlw   ASPSTATE        ; Isolate new aspect value bits   
-
-    btfss   nxtCntlr,REVFLG ; Skip if next block is line reversed ...
-    iorwf   prvCntlr,F      ; ... else set new aspect value
-
-    ; Run this occupation block state machine
-    ;******************************************************************
-
-    ; The signal aspect for this block is dependant on the aspect of the next
-    ; signal but for the purpose of this block it doesn't matter if these have
-    ; been received or simulated.
-
-    movlw   high BlockTable ; Load jump table address high byte ...
-    movwf   PCLATH          ; ... into PCLATH to make jump in same code block
-    movf    lclCntlr,W      ; Use current state value ...
-BlockStateJump
-    andlw   BLKSTATE        ; ... (after removing flag and aspect bits) ...
-    addwf   PCL,F           ; ... as offset into state jump table
-
-BlockTable
-    goto    BlockClear      ; State 0 - Block clear
-    goto    TrainEnteringF  ; State 1 - Train entering forward
-    goto    TrainInBlock    ; State 2 - Train in block
-    goto    TrainLeavingF   ; State 3 - Train leaving forward
-    goto    TrainSpansBlock ; State 4 - Train spanning block
-    goto    TrainEnteringR  ; State 5 - Train entering reverse
-    goto    TrainLeavingR   ; State 6 - Train leaving reverse
-    goto    BlockEnd        ; State 7 - Unused
-
-NewBlkState
-    iorwf   lclCntlr,F      ; Set at least the desired state
-    iorlw   ~BLKSTATE       ; Protect non state bits
-    andwf   lclCntlr,F      ; Narrow to the desired state
-    goto    BlockStateJump  ; Go directly to the new state
-
-
-BlockClear      ; State 0 - Block clear
-
-    bcf     prvCntlr,REVFLG ; Clear line reversed flag for this block
-
-CheckNtrRev
-    ; Check for train entering in reverse
-    movlw   TRAINENTERINGR
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    NewBlkState     ; ... else train entering in reverse, change state
-
-CheckNtrFwd
-    ; Check for train entering forwards
-    btfss   prvCntlr,ENTFLG ; Skip if entry detection on ...
-    goto    BlockEnd        ; ... else remain in current state
-
-    ; Train at block entrance,
-    ; next state = 1 - Train entering forward,
-    incf    lclCntlr,F
-
-
-TrainEnteringF  ; State 1 - Train entering forward
-
-ChkSpnFwd
-    ; Check if train now spans this block
-    movlw   BLOCKSPANNED
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    NewBlkState     ; ... else train now spans this block, change state
-
-CheckOccFwd
-    ; Check if train now occupies this block
-    btfsc   prvCntlr,ENTFLG ; Skip if entry detection off ...
-    goto    BlockOccupied   ; ... else remain in current state
-
-    ; Train no longer at block entrance,
-    ; next state = 2 - Train in block
-    incf    lclCntlr,F
-
-
-TrainInBlock   ; State 2 - Train in block
-
-CheckExtRev
-    ; Check for train exiting in reverse
-    movlw   TRAINLEAVINGR
-    btfsc   prvCntlr,ENTFLG ; Skip if entry detection off ...
-    goto    NewBlkState     ; ... else train exiting in reverse, change state
-
-CheckExtFwd
-    btfss   lclCntlr,EXTFLG ; Skip if exit detection on ...
-    goto    BlockOccupied   ; ... else remain in current state
-
-    ; Train detected at block exit,
-    ; next state = 3 - Train leaving forward
-    incf    lclCntlr,F
-
-
-TrainLeavingF   ; State 3 - Train leaving forward
-
-    ; Check if train has left block
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    ChkTrnRvd       ; ... else check if train now spans this block
-
-    ; Train has left block
-
-    ; In case simulating next controller set next signal aspect value to red
-    ; and reset the aspect timer to simulate train traversing next block
-    movlw   ~ASPSTATE
-    andwf   lclCntlr,F      ; Ensure local signal continues to display stop
-    andwf   nxtCntlr,F
-
-    movf    aspectTime,W
-    movwf   nxtTimer
-
-    ; Train no longer at block exit,
-    ; next state = 0 - Block clear
-    movlw   BLOCKCLEAR
-    goto    NewBlkState     ; Change state
-
-ChkTrnRvd
-    ; Check if train has changed direction and now spans this block
-    btfss   prvCntlr,ENTFLG ; Skip if entry detection on ...
-    goto    BothOccupied    ; ... else remain in current state
-
-    bsf     prvCntlr,REVFLG ; Set line reversed flag for this block
-
-    ; Train detected at block entrance,
-    ; next state = 4 - Train spanning block
-    incf    lclCntlr,F
-
-
-TrainSpansBlock    ; State 4 - Train spanning block
-
-CheckTrvFwd
-    ; Check for train traversal of block forwards
-    movlw   TRAINLEAVINGF
-    btfss   prvCntlr,ENTFLG ; Skip if entry detection on ...
-    goto    NewBlkState     ; ... else train is leaving forwards, change state
-
-CheckTrvRev
-    ; Check for train traversal of block in reverse
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    BothOccupied    ; ... else remain in current state
-
-    ; Train no longer at block exit,
-    ; next state = 6 - Train leaving reverse
-    movlw   TRAINLEAVINGR
-    goto    NewBlkState
-
-
-TrainEnteringR  ; State 5 - Train entering reverse
-
-    bsf     prvCntlr,REVFLG ; Set line reversed flag for this block
-
-ChkSpnRev
-    ; Check if train now spans this block
-    movlw   BLOCKSPANNED
-    btfsc   prvCntlr,ENTFLG ; Skip if entry detection off ...
-    goto    NewBlkState     ; ... else train at block entrance, change state
-
-CheckOccRev
-    ; Check if train now occupies this block
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    BothOccupied    ; ... else remain in current state
-
-    ; Train no longer at block exit,
-    ; next state = 2 - Train in block
-    movlw   BLOCKOCCUPIED
-    goto    NewBlkState
-
-
-TrainLeavingR   ; State 6 - Train leaving reverse
-
-    bsf     prvCntlr,REVFLG ; Set line reversed flag for this block
-
-    ; Check if train has changed direction and now spans this block
-    movlw   BLOCKSPANNED
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    NewBlkState     ; ... else train at block exit, change state
-
-    ; Check if train has left block
-    btfsc   prvCntlr,ENTFLG ; Skip if entry detection off ...
-    goto    BlockOccupied   ; ... else remain in current state
-
-    ; Train no longer at block entrance,
-    ; next state = 0 - Block clear
-    movlw   BLOCKCLEAR
-    goto    NewBlkState     ; Change State
-
-BothOccupied ; End of block state machine, next & this blocks occupied
-    movlw   ~ASPSTATE
-    andwf   lclCntlr,F      ; Clear next block's signal aspect value (= stop)
-
-BlockOccupied ; End of block state machine, this block occupied
-    movlw   ~ASPSTATE
-    andwf   prvCntlr,F      ; Clear this block's signal aspect value (= stop)
-
-BlockEnd    ; End of signal block state machine
-
-    ; Get aspect display value
-    ;******************************************************************
-
-    movf    lclCntlr,W      ; Get controller status
-    andlw   ASPSTATE        ; Isolate aspect value
-    movwf   aspOut          ; Save as aspect display value
+LocalAspectDone
+    movwf   aspVal          ; Save aspect display value
 
 
     ;******************************************************************

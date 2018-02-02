@@ -92,10 +92,11 @@ endRAM      EQU afterRAM - 1
 #include "blcksqnc_cod.inc"
 
 ;**********************************************************************
-; Subroutine to return aspect output mask in accumulator
+; Subroutine to return aspect output value in accumulator
 ;**********************************************************************
-GetAspectMask
-    movf    aspOut,W
+GetAspectOutput
+    movf    aspVal,W        ; Get output value, may contain spurious bits
+    andlw   ASPSTATE        ; Isolate aspect value
     btfsc   STATUS,Z
     retlw   STPMSK
 
@@ -103,7 +104,7 @@ GetAspectMask
     btfsc   STATUS,Z
     retlw   CLRMSK
 
-    btfss   aspOut,ASPCLFLG
+    btfss   aspVal,ASPCLFLG
     retlw   CL1MSK
     retlw   CL2MSK
     return

@@ -125,7 +125,7 @@ TRAINLEAVINGF  EQU  3           ; Train leaving forward
 BLOCKSPANNED   EQU  4           ; Train spanning block
 TRAINENTERINGR EQU  5           ; Train entering reverse
 TRAINLEAVINGR  EQU  6           ; Train leaving reverse
-BLKSTATE       EQU  B'00000111' ; Mask to isolate block
+BLKSTATE       EQU  B'00000111' ; Mask to isolate block state value
 
 ; Aspect values
 ASPSTP      EQU     B'00000000' ; Stop aspect value
@@ -139,20 +139,16 @@ ASPSTATE    EQU     B'11000000' ; Aspect value mask
 ; Local controller status flags
 STRFLG      EQU     3           ; Exit detection stretched bit in status byte
 STRMSK      EQU     B'00001000' ; Exit detection stretched state bit mask
-INHFLG      EQU     4           ; Signal inhibited bit in status byte
-INHMSK      EQU     B'00010000' ; Signal inhibited state bit mask
-EXTFLG      EQU     5           ; Exit detection bit in status byte
-EXTMSK      EQU     B'00100000' ; Exit detection state bit mask
-
-; Previous controller (received)status flags
-ENTFLG      EQU     1           ; Entrance detection bit in status byte
-ENTMSK      EQU     B'00000010' ; Entrance detection state bit mask
+EXTFLG      EQU     4           ; Exit detection bit in status byte
+EXTMSK      EQU     B'00010000' ; Exit detection state bit mask
+ENTFLG      EQU     5           ; Entrance detection bit in status byte
+ENTMSK      EQU     B'00100000' ; Entrance detection state bit mask
 
 ; Next and Previous controllers common (received and sent) status flags
-REVFLG      EQU     3           ; Line reversed bit in status byte
-REVMSK      EQU     B'00001000' ; Line reversed state bit mask
 SPDFLG      EQU     4           ; Special speed bit in status byte
 SPDMSK      EQU     B'00010000' ; Special speed state bit mask
+REVFLG      EQU     5           ; Line reversed bit in status byte
+REVMSK      EQU     B'00100000' ; Line reversed state bit mask
 
 ; Aspect output constants
 ASPPORT     EQU     PORTA       ; Aspect output port
@@ -168,6 +164,7 @@ REVBIT      EQU     1           ; Line reversed, force stop aspect (active low)
 BIDBIT      EQU     2           ; Running line is bidirectional
 SPDBIT      EQU     3           ; Display special speed aspects (active low)
 INHBIT      EQU     7           ; Inhibit, forced stop aspect (active low)
+INPMSK      EQU     B'10001111' ; Mask for input bits
 
 ; Detector I/O constants
 EMTPORT     EQU     PORTB       ; Emitter drive port
