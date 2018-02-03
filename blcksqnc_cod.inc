@@ -322,19 +322,19 @@ TimingEnd
     ; sent so as a simple error check these are sent in low nibble with ones
     ; complement in high nibble
 
-    iorlw   0x0F            ; Status bits - high nibble, 0x0F - low nibble
+    iorlw   0x0F            ; Status bits - high nibble, 0xF - low nibble
 
-    movwf   FSR             ; Copy status bits - high nibble, 0x0F - low nibble
+    movwf   FSR             ; Copy status bits - high nibble, 0xF - low nibble
     swapf   FSR,F           ; Swap, 0xF - high nibble, status bits - low nibble
 
     andlw   0xF0            ; Status bits - high nibble, 0 - low nibble
     xorwf   FSR,F           ; Complemented high nibble, original low nibble
 
     call    LinkTxN         ; Send data to next controller
-    btfss   STATUS,Z        ; Skip if data sent ...
-    goto    NextLinkEnd     ; ... else continue trying to send
+    btfsc   STATUS,Z        ; Skip if data not sent ...
+    bcf     lnkNState,LNKDIRFLG ; ... else resume listening to next controller
 
-    bcf     lnkNState,LNKDIRFLG ; Resume listening to next controller
+    goto    NextLinkEnd
 
 CheckNextRx
     ; Look for status received from next controller
@@ -643,9 +643,9 @@ SendStopSignal
     ; are sent so as a simple error check these are sent in low nibble with
     ; ones complement in high nibble.
 
-    iorlw   0x0F            ; Status bits - high nibble, 0x0F - low nibble
+    iorlw   0x0F            ; Status bits - high nibble, 0xF - low nibble
 
-    movwf   FSR             ; Copy status bits - high nibble, 0x0F - low nibble
+    movwf   FSR             ; Copy status bits - high nibble, 0xF - low nibble
     swapf   FSR,F           ; Swap, 0xF - high nibble, status bits - low nibble
 
     andlw   0xF0            ; Status bits - high nibble, 0 - low nibble

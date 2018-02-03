@@ -56,7 +56,7 @@ PORTASTATUS EQU     B'00000000'
 PORTBSTATUS EQU     B'00011111'
 
 ; Interrupt & timing constants
-RTCCINT     EQU     160         ; 10KHz = ((4MHz / 4) / 100) (0.1 mSec tick)
+RTCCINT     EQU     256 - 100   ; 10KHz = ((4MHz / 4) / 100) (0.1 mSec tick)
 
 ; Timing constants
 INTSCLNG    EQU     80 + 1      ; Interrupts scaling to 125Hz (8 mSec tick)
@@ -66,7 +66,7 @@ HALFSEC     EQU     B'11000000' ; Roughly half second scaled interrupts mask
 INTSERINI   EQU     6           ; Interrupts per initial Rx serial bit @ 2K5
 INTSERBIT   EQU     4           ; Interrupts per serial bit @ 2K5 baud
 INTLNKDLYRX EQU     0           ; Interrupts for link Rx turnaround delay
-INTLNKDLYTX EQU     4           ; Interrupts for link Tx turnaround delay
+INTLNKDLYTX EQU     10          ; Interrupts for link Tx turnaround delay
 
 INTLINKTMOP EQU     5           ; Scaled interrupts, previous link timeout
 INTLINKTMON EQU     25          ; Scaled interrupts, next link timeout
@@ -76,7 +76,7 @@ RXNTRIS     EQU     TRISB       ; Rx port direction register
 RXNPORT     EQU     PORTB       ; Rx port data register
 RXNBIT      EQU     7           ; Rx input bit
 ;  Half duplex so Rx and Tx use same port
-TXNTRIS     EQU     RXNPORT     ; Tx port direction register
+TXNTRIS     EQU     RXNTRIS     ; Tx port direction register
 TXNPORT     EQU     RXNPORT     ; Tx port data register
 TXNBIT      EQU     RXNBIT      ; Tx output bit
 
