@@ -38,7 +38,7 @@ BeginISR
 RunISR
     ; Re-enable the timer interrupt and reload the timer
     bcf     INTCON,T0IF     ; Reset the TMR0 Interrupt bit
-    movlw   (RTCCINT - 2)   ; Allow 2 cycles for TMR0 write inhibit
+    movlw   low RTCCINT + 2 ; Allow 2 cycles for TMR0 write inhibit
     addwf   TMR0,F          ; Reload TMR0
 
     ; Service next controller link
@@ -205,7 +205,7 @@ ClearRAM
     ; Initialise interrupts
     ;******************************************************************
 
-    movlw   RTCCINT
+    movlw   low RTCCINT
     movwf   TMR0            ; Initialise TMR0 for timer interrupts
     clrf    INTCON          ; Disable all interrupt sources
     bsf     INTCON,T0IE     ; Enable TMR0 interrupts
@@ -277,7 +277,7 @@ Timing
     decfsz  secCount,F      ; Decrement seconds scaled interrupts counter ...
     goto    TimingEnd       ; ... skipping this jump if it has reached zero
 
-    movlw   SECSCLNG        ; Reload one second ...
+    movlw   low SECSCLNG    ; Reload one second ...
     movwf   secCount        ; ... scaled interrupts counter
 
     decfsz  nxtTimer,W      ; Decrement next signal simulation timer into W
