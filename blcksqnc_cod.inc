@@ -227,13 +227,14 @@ ClearRAM
     bsf     INTCON,GIE      ; Enable interrupts
 
 
-;******************************************************************
+;**********************************************************************
 ; Top of main processing loop
-;******************************************************************
+;**********************************************************************
 
 Main
     clrwdt                  ; Reset the watchdog timer
 
+    ;******************************************************************
     ; Perform timing operations
     ;******************************************************************
 
@@ -313,6 +314,8 @@ Timing
 
 TimingEnd
 
+
+    ;******************************************************************
     ; Check status of train detection input (active low) for on
     ;******************************************************************
 
@@ -322,6 +325,188 @@ TimingEnd
     bcf     lclCntlr,STRFLG ; ... else clear exit detection stretched flag
 
 
+    ;******************************************************************
+    ; Run this occupation block state machine
+    ;******************************************************************
+
+    ; The signal aspect for this block is dependent on the aspect of the next
+    ; signal but for the purpose of this block it doesn't matter if these have
+    ; been received or simulated.
+
+    movlw   high BlockTable ; Load jump table address high byte ...
+    movwf   PCLATH          ; ... into PCLATH to make jump in same code block
+    movf    lclCntlr,W      ; Use current state value ...
+
+BlockStateJump
+    andlw   BLKSTATE        ; ... (after removing flag and aspect bits) ...
+    addwf   PCL,F           ; ... as offset into state jump table
+
+BlockTable
+    goto    BlockClear      ; State 0 - Block clear
+    goto    TrainEnteringF  ; State 1 - Train entering forward
+    goto    TrainInBlock    ; State 2 - Train in block
+    goto    TrainLeavingF   ; State 3 - Train leaving forward
+    goto    TrainSpansBlock ; State 4 - Train spanning block
+    goto    TrainEnteringR  ; State 5 - Train entering reverse
+    goto    TrainLeavingR   ; State 6 - Train leaving reverse
+    goto    BlockEnd        ; State 7 - Unused
+
+#if (high BlockTable) != (high $)
+    error "Block state jump table spans 8 bit boundary"
+#endif
+
+NewBlkState
+    iorwf   lclCntlr,F      ; Set at least the desired state
+    iorlw   ~BLKSTATE       ; Protect non state bits
+    andwf   lclCntlr,F      ; Narrow to the desired state
+    goto    BlockStateJump  ; Go directly to the new state
+
+
+BlockClear      ; **** State 0 - Block clear ****
+
+CheckNtrRev
+    ; Check for train entering in reverse
+    movlw   TRAINENTERINGR  ; Possible next state
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    goto    NewBlkState     ; ... else train entering in reverse, change state
+
+CheckNtrFwd
+    ; Check for train entering forwards
+    btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
+    goto    BlockEnd        ; ... else remain in current state
+
+    ; Train at block entrance,
+    ; next state = 1 - Train entering forward,
+    incf    lclCntlr,F      ; Roll through to next state
+
+
+TrainEnteringF  ; **** State 1 - Train entering forward ****
+
+    bcf     lclCntlr,BRVFLG ; Clear block reversed
+
+ChkSpnFwd
+    ; Check if train now spans this block
+    movlw   BLOCKSPANNED    ; Possible next state
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    goto    NewBlkState     ; ... else train now spans this block, change state
+
+CheckOccFwd
+    ; Check if train now occupies this block
+    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
+    goto    BlockEnd        ; ... else remain in current state
+
+    ; Train no longer at block entrance,
+    ; next state = 2 - Train in block
+    incf    lclCntlr,F      ; Roll through to next state
+
+
+TrainInBlock   ; **** State 2 - Train in block ****
+
+CheckExtRev
+    ; Check for train exiting in reverse
+    movlw   TRAINLEAVINGR   ; Possible next state
+    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
+    goto    NewBlkState     ; ... else train exiting in reverse, change state
+
+CheckExtFwd
+    btfss   lclCntlr,EXTFLG ; Skip if exit detection on ...
+    goto    BlockEnd        ; ... else remain in current state
+
+    ; Train detected at block exit,
+    ; next state = 3 - Train leaving forward
+    incf    lclCntlr,F      ; Roll through to next state
+
+
+TrainLeavingF   ; **** State 3 - Train leaving forward ****
+
+    bcf     lclCntlr,BRVFLG ; Clear block reversed
+
+    ; Check if train has left block
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    goto    ChkTrnRvd       ; ... else check if train now spans this block
+
+    ; Train no longer at block exit,
+    ; next state = 0 - Block clear
+    movlw   BLOCKCLEAR      ; Next state
+    goto    NewBlkState     ; Change state
+
+ChkTrnRvd
+    ; Check if train has changed direction and now spans this block
+    btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
+    goto    BlockEnd    ; ... else remain in current state
+
+    bsf     lclCntlr,BRVFLG ; Set block reversed
+
+    ; Train detected at block entrance,
+    ; next state = 4 - Train spanning block
+    incf    lclCntlr,F      ; Roll through to next state
+
+
+TrainSpansBlock    ; **** State 4 - Train spanning block ****
+
+CheckTrvFwd
+    ; Check for train traversal of block forwards
+    movlw   TRAINLEAVINGF   ; Possible next state
+    btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
+    goto    NewBlkState     ; ... else train is leaving forwards, change state
+
+CheckTrvRev
+    ; Check for train traversal of block in reverse
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    goto    BlockEnd    ; ... else remain in current state
+
+    ; Train no longer at block exit,
+    ; next state = 6 - Train leaving reverse
+    movlw   TRAINLEAVINGR   ; Next state
+    goto    NewBlkState
+
+
+TrainEnteringR  ; **** State 5 - Train entering reverse ****
+
+    bsf     lclCntlr,BRVFLG ; Set block reversed
+
+ChkSpnRev
+    ; Check if train now spans this block
+    movlw   BLOCKSPANNED    ; Possible next state
+    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
+    goto    NewBlkState     ; ... else train at block entrance, change state
+
+CheckOccRev
+    ; Check if train now occupies this block
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    goto    BlockEnd    ; ... else remain in current state
+
+    ; Train no longer at block exit,
+    ; next state = 2 - Train in block
+    movlw   BLOCKOCCUPIED   ; Next state
+    goto    NewBlkState
+
+
+TrainLeavingR   ; **** State 6 - Train leaving reverse ****
+
+    bsf     lclCntlr,BRVFLG ; Set block reversed
+
+    ; Check if train has changed direction and now spans this block
+    movlw   BLOCKSPANNED    ; Possible next state
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    goto    NewBlkState     ; ... else train at block exit, change state
+
+    ; Check if train has left block
+    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
+    goto    BlockEnd        ; ... else remain in current state
+
+    ; Train no longer at block entrance,
+    ; next state = 0 - Block clear
+    movlw   BLOCKCLEAR      ; Next state
+    goto    NewBlkState     ; Change State
+
+BlockEnd    ; End of signal block state machine
+
+    btfsc   lclCntlr,BRVFLG ; If block is reversed ...
+    bcf     inputs,REVBIT   ; ... set line reversed (active low)
+
+
+    ;******************************************************************
     ; Service link with next controller
     ;******************************************************************
 
@@ -331,11 +516,10 @@ TimingEnd
     ; Send status reply to next controller
     ;******************************************************************
 
-    movf    lclCntlr,W      ; Get local controller status
+    movf    lclCntlr,W      ; Send local controller status
 
-    ; Only four bits of status (aspect value, entry and exit detection) are
-    ; sent so as a simple error check these are sent in low nibble with ones
-    ; complement in high nibble
+    ; Only detection and block reversal status are sent so as a simple error
+    ; check these are sent in low nibble with ones complement in high nibble
 
     iorlw   0x0F            ; Status bits - high nibble, 0xF - low nibble
 
@@ -438,7 +622,7 @@ TimeNextSignal
 
 NextLinkEnd
 
-    ; Next controller may propogate its line reversed and special speed
+    ; Line reversed may be propogated by bidirectional controllers
     ;******************************************************************
 
     btfsc   nxtCntlr,REVFLG ; Pick up line reversal from next controller
@@ -446,183 +630,8 @@ NextLinkEnd
     btfss   inputs,BIDBIT   ; Skip if line bidirectional ...
     bsf     inputs,REVBIT   ; ... else suppress line reversed (active low)
 
-    btfsc   nxtCntlr,SPDFLG ; Pick up special speed from next controller
-    bcf     inputs,SPDBIT   ; Set special speed (active low)
 
-
-    ; Run this occupation block state machine
     ;******************************************************************
-
-    ; The signal aspect for this block is dependent on the aspect of the next
-    ; signal but for the purpose of this block it doesn't matter if these have
-    ; been received or simulated.
-
-    movlw   high BlockTable ; Load jump table address high byte ...
-    movwf   PCLATH          ; ... into PCLATH to make jump in same code block
-    movf    lclCntlr,W      ; Use current state value ...
-
-BlockStateJump
-    andlw   BLKSTATE        ; ... (after removing flag and aspect bits) ...
-    addwf   PCL,F           ; ... as offset into state jump table
-
-BlockTable
-    goto    BlockClear      ; State 0 - Block clear
-    goto    TrainEnteringF  ; State 1 - Train entering forward
-    goto    TrainInBlock    ; State 2 - Train in block
-    goto    TrainLeavingF   ; State 3 - Train leaving forward
-    goto    TrainSpansBlock ; State 4 - Train spanning block
-    goto    TrainEnteringR  ; State 5 - Train entering reverse
-    goto    TrainLeavingR   ; State 6 - Train leaving reverse
-    goto    BlockEnd        ; State 7 - Unused
-
-#if (high BlockTable) != (high $)
-    error "Block state jump table spans 8 bit boundary"
-#endif
-
-NewBlkState
-    iorwf   lclCntlr,F      ; Set at least the desired state
-    iorlw   ~BLKSTATE       ; Protect non state bits
-    andwf   lclCntlr,F      ; Narrow to the desired state
-    goto    BlockStateJump  ; Go directly to the new state
-
-
-BlockClear      ; State 0 - Block clear
-
-CheckNtrRev
-    ; Check for train entering in reverse
-    movlw   TRAINENTERINGR  ; Possible next state
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    NewBlkState     ; ... else train entering in reverse, change state
-
-CheckNtrFwd
-    ; Check for train entering forwards
-    btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
-    goto    BlockEnd        ; ... else remain in current state
-
-    ; Train at block entrance,
-    ; next state = 1 - Train entering forward,
-    incf    lclCntlr,F      ; Roll through to next state
-
-
-TrainEnteringF  ; State 1 - Train entering forward
-
-ChkSpnFwd
-    ; Check if train now spans this block
-    movlw   BLOCKSPANNED    ; Possible next state
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    NewBlkState     ; ... else train now spans this block, change state
-
-CheckOccFwd
-    ; Check if train now occupies this block
-    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
-    goto    BlockEnd        ; ... else remain in current state
-
-    ; Train no longer at block entrance,
-    ; next state = 2 - Train in block
-    incf    lclCntlr,F      ; Roll through to next state
-
-
-TrainInBlock   ; State 2 - Train in block
-
-CheckExtRev
-    ; Check for train exiting in reverse
-    movlw   TRAINLEAVINGR   ; Possible next state
-    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
-    goto    NewBlkState     ; ... else train exiting in reverse, change state
-
-CheckExtFwd
-    btfss   lclCntlr,EXTFLG ; Skip if exit detection on ...
-    goto    BlockEnd        ; ... else remain in current state
-
-    ; Train detected at block exit,
-    ; next state = 3 - Train leaving forward
-    incf    lclCntlr,F      ; Roll through to next state
-
-
-TrainLeavingF   ; State 3 - Train leaving forward
-
-    ; Check if train has left block
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    ChkTrnRvd       ; ... else check if train now spans this block
-
-    ; Train no longer at block exit,
-    ; next state = 0 - Block clear
-    movlw   BLOCKCLEAR      ; Next state
-    goto    NewBlkState     ; Change state
-
-ChkTrnRvd
-    ; Check if train has changed direction and now spans this block
-    btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
-    goto    BlockEnd    ; ... else remain in current state
-
-    bcf     inputs,REVBIT   ; Set line reversed (active low)
-
-    ; Train detected at block entrance,
-    ; next state = 4 - Train spanning block
-    incf    lclCntlr,F      ; Roll through to next state
-
-
-TrainSpansBlock    ; State 4 - Train spanning block
-
-CheckTrvFwd
-    ; Check for train traversal of block forwards
-    movlw   TRAINLEAVINGF   ; Possible next state
-    btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
-    goto    NewBlkState     ; ... else train is leaving forwards, change state
-
-CheckTrvRev
-    ; Check for train traversal of block in reverse
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    BlockEnd    ; ... else remain in current state
-
-    ; Train no longer at block exit,
-    ; next state = 6 - Train leaving reverse
-    movlw   TRAINLEAVINGR   ; Next state
-    goto    NewBlkState
-
-
-TrainEnteringR  ; State 5 - Train entering reverse
-
-    bcf     inputs,REVBIT   ; Set line reversed (active low)
-
-ChkSpnRev
-    ; Check if train now spans this block
-    movlw   BLOCKSPANNED    ; Possible next state
-    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
-    goto    NewBlkState     ; ... else train at block entrance, change state
-
-CheckOccRev
-    ; Check if train now occupies this block
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    BlockEnd    ; ... else remain in current state
-
-    ; Train no longer at block exit,
-    ; next state = 2 - Train in block
-    movlw   BLOCKOCCUPIED   ; Next state
-    goto    NewBlkState
-
-
-TrainLeavingR   ; State 6 - Train leaving reverse
-
-    bcf     inputs,REVBIT   ; Set line reversed (active low)
-
-    ; Check if train has changed direction and now spans this block
-    movlw   BLOCKSPANNED    ; Possible next state
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    NewBlkState     ; ... else train at block exit, change state
-
-    ; Check if train has left block
-    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
-    goto    BlockEnd        ; ... else remain in current state
-
-    ; Train no longer at block entrance,
-    ; next state = 0 - Block clear
-    movlw   BLOCKCLEAR      ; Next state
-    goto    NewBlkState     ; Change State
-
-BlockEnd    ; End of signal block state machine
-
-
     ; Service link with previous controller
     ;******************************************************************
 
@@ -642,7 +651,7 @@ BlockEnd    ; End of signal block state machine
     goto    SendStopSignal  ; ... else signal for block displays stop
 
     movlw   ASPINCR         ; Increment aspect value ...
-    addwf   lclCntlr,W      ; ... of local signal into W
+    addwf   aspVal,W        ; ... of local signal into W
     btfsc   STATUS,C        ; Skip if no overflow ...
     movlw   ASPCLR          ; ... else send clear aspect
 
@@ -654,9 +663,9 @@ SendStopSignal
     btfss   inputs,SPDBIT   ; Skip if not special speed (active low) ...
     iorlw   SPDMSK          ; ... else propagate this to previous controller
 
-    ; Only four bits of status (aspect value, line reversed, and special speed)
-    ; are sent so as a simple error check these are sent in low nibble with
-    ; ones complement in high nibble.
+    ; Only aspect value, line reversed, and special speed are sent so as a
+    ; simple error check these are sent in low nibble with ones complement in
+    ; high nibble.
 
     iorlw   0x0F            ; Status bits - high nibble, 0xF - low nibble
 
@@ -718,6 +727,8 @@ PrevRxDone
 
 PrevLinkEnd
 
+
+    ;******************************************************************
     ; Process local signal aspect display
     ;******************************************************************
 
@@ -725,7 +736,7 @@ PrevLinkEnd
     ; the signal aspect for the next block
 
     movlw   ASPSTATE
-    andwf   lclCntlr,W      ; Test local signal aspect value
+    andwf   aspVal,W        ; Test local signal aspect value
     btfss   STATUS,Z        ; Skip if local signal aspect value = stop ...
     goto    SetLocalAspect  ; ... otherwise set local aspect
 
@@ -733,25 +744,22 @@ PrevLinkEnd
     goto    LocalAspectDone ; ... otherwise leave local aspect = stop
 
 SetLocalAspect
-    movlw   ~ASPSTATE
-    andwf   lclCntlr,F      ; Clear local signal aspect value bits (= stop)
-
-    btfss   inputs,INHBIT   ; Skip if signal is not inhibited (active low) ...
-    goto    LocalAspectDone ; ... otherwise leave local aspect = stop
-
     movlw   ASPSTATE
-    andwf   nxtCntlr,W      ; Get local signal aspect from next controller ...
-    iorwf   lclCntlr,F      ; ... for local display
+    andwf   nxtCntlr,W      ; Get local signal aspect from next controller
+    btfss   inputs,INHBIT   ; Skip if signal is not inhibited (active low) ...
+    clrw                    ; ... otherwise set aspect = stop
 
 LocalAspectDone
     movwf   aspVal          ; Save aspect display value
 
 
+    ;******************************************************************
     ; Optional main loop code (user code should define UserMain macro)
     ;******************************************************************
 #ifdef UserMain
     UserMain
 #endif
+
 
     ;******************************************************************
     ; End of main processing loop

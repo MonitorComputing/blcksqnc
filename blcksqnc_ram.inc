@@ -103,11 +103,7 @@ lclCntlr        ; Status of this controller:
                 ;     4 - Train spanning block
                 ;     5 - Train entering reverse
                 ;     6 - Train leaving reverse
-                ;   bit 3      - Exit detection stretched
-                ;   bit 4      - Exit detection
-                ;   bit 5      - Entry detection (Exit detection from previous)
-                ;   bits 6,7   - Aspect value
-                ;     0 - Stop
-                ;     1 - Clear1
-                ;     2 - Clear2
-                ;     3 - Clear
+                ;   bit 3 - Exit detection stretched
+                ;   bit 4 - Exit detection
+                ;   bit 5 - Entry detection (Exit detection from previous)
+                ;   bit 6 - Block reversed

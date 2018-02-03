@@ -143,6 +143,8 @@ EXTFLG      EQU     4           ; Exit detection bit in status byte
 EXTMSK      EQU     B'00010000' ; Exit detection state bit mask
 ENTFLG      EQU     5           ; Entrance detection bit in status byte
 ENTMSK      EQU     B'00100000' ; Entrance detection state bit mask
+BRVFLG      EQU     6           ; Block reversed bit in status byte
+BRVMSK      EQU     B'01000000' ; Block reversed state bit mask
 
 ; Next and Previous controllers common (received and sent) status flags
 SPDFLG      EQU     4           ; Special speed bit in status byte
