@@ -96,7 +96,7 @@ endRAM      EQU afterRAM - 1
 ;**********************************************************************
 GetAspectOutput
     movf    aspVal,W        ; Get output value, may contain spurious bits
-    andlw   ASPSTATE        ; Isolate aspect value
+    andlw   ASPMSK          ; Isolate aspect value
     btfsc   STATUS,Z
     retlw   STPMSK
 

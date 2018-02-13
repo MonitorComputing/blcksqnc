@@ -49,7 +49,8 @@ lnkPState       ; Link state register (see 'link_hd.inc')
                 ;     1  - Receiving data
                 ;     2  - Waiting for far end to turn around
                 ;     3  - Transmiting data
-                ;   bits 2,3 - Unused
+                ;   bits 2 - No reception from previous link
+                ;   bits 3 - Unused
                 ;   bit  4 - Tx enabled
                 ;   bit  5 - Rx enabled
                 ;   bit  6 - Synchronise, Tx or Rx a break
@@ -107,3 +108,4 @@ lclCntlr        ; Status of this controller:
                 ;   bit 4 - Exit detection
                 ;   bit 5 - Entry detection (Exit detection from previous)
                 ;   bit 6 - Block reversed
+                ;   bit 7 - Previous block reversed

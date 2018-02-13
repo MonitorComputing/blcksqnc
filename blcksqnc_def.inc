@@ -117,6 +117,8 @@ RXPSTOP     EQU     7           ; Seeking stop bit
 TXPFLG      EQU     RXPFLG      ; Transmit byte buffer 'clear' status bit
 TXPBREAK    EQU     RXPBREAK    ; Send 'break' status bit
 
+NOPFLG      EQU     2           ; No reception from previous link status bit
+
 ; Block state values
 BLOCKCLEAR     EQU  0           ; Block clear
 TRAINENTERINGF EQU  1           ; Train entering forward
@@ -134,7 +136,7 @@ ASPCL2      EQU     B'10000000'
 ASPCLR      EQU     B'11000000' ; Clear aspect value
 ASPCLFLG    EQU     7           ; Clear aspect value flag bit
 ASPINCR     EQU     B'01000000' ; Aspect value increment
-ASPSTATE    EQU     B'11000000' ; Aspect value mask
+ASPMSK      EQU     B'11000000' ; Aspect value mask
 
 ; Local controller status flags
 STRFLG      EQU     3           ; Exit detection stretched bit in status byte
@@ -145,12 +147,14 @@ ENTFLG      EQU     5           ; Entrance detection bit in status byte
 ENTMSK      EQU     B'00100000' ; Entrance detection state bit mask
 BRVFLG      EQU     6           ; Block reversed bit in status byte
 BRVMSK      EQU     B'01000000' ; Block reversed state bit mask
+PRVFLG      EQU     7           ; Previous block reversed bit in status byte
+PRVMSK      EQU     B'01000000' ; Previous block reversed state bit mask
 
 ; Next and Previous controllers common (received and sent) status flags
 SPDFLG      EQU     4           ; Special speed bit in status byte
 SPDMSK      EQU     B'00010000' ; Special speed state bit mask
-REVFLG      EQU     5           ; Line reversed bit in status byte
-REVMSK      EQU     B'00100000' ; Line reversed state bit mask
+LRVFLG      EQU     5           ; Line reversed bit in status byte
+LRVMSK      EQU     B'00100000' ; Line reversed state bit mask
 
 ; Aspect output constants
 ASPPORT     EQU     PORTA       ; Aspect output port
