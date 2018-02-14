@@ -563,13 +563,21 @@ CheckNextRx
 
     movwf   nxtCntlr        ; Save received next controller status
 
-    btfsc   nxtCntlr,LRVFLG ; Skip if next controller line not reversed ...
-    bsf     lclCntlr,BRVFLG ; ... else set block reversed
-
     bsf     lnkNState,LNKDIRFLG ; Start replying to next controller
 
     MaxLw   INTLINKTMON, 1
     movwf   lnkNTimer       ; Reset link reception timeout
+
+    btfsc   nxtCntlr,LRVFLG ; Skip if next controller line not reversed ...
+    bsf     lclCntlr,BRVFLG ; ... else set local block reversed
+
+    btfsc   nxtCntlr,LRVFLG ; Skip if next controller line not reversed ...
+    goto    NextLinkEnd     ; ... else leave local block reversed
+
+    movlw   BLKSTATE
+    andwf   lclCntlr,W      ; Test block state of local block
+    btfsc   STATUS,Z        ; Skip if local block not clear ...
+    bcf     lclCntlr,BRVFLG ; ... else clear local block reversed
 
     goto    NextLinkEnd
 
@@ -651,14 +659,14 @@ LocalAspectDone
 
 
     ;******************************************************************
-    ; Block reversal can be from block logic, next controller, or input
+    ; Line reversal can be from input, next controller, or block logic
     ;******************************************************************
 
-    btfss   inputs,REVBIT   ; Skip if line not reversed (active low) ...
-    bsf     lclCntlr,BRVFLG ; ... else set block reversed
+    btfsc   lclCntlr,BRVFLG ; Skip if local block not reversed ...
+    bcf     inputs,REVBIT   ; ... else set line reversed (active low)
 
     btfss   inputs,BIDBIT   ; Skip if line bidirectional ...
-    bcf     lclCntlr,BRVFLG ; ... else clear block reversed
+    bsf     inputs,REVBIT   ; ... else clear line reversed (active low)
 
 
     ;******************************************************************
@@ -687,7 +695,7 @@ LocalAspectDone
 
 SendAspects
     andlw   ASPMSK          ; Clear bits other than aspect value to send
-    btfsc   lclCntlr,BRVFLG ; Skip if block not reversed ...
+    btfss   inputs,REVBIT   ; Skip if line not (active low) reversed ...
     movlw   LRVMSK          ; ... else propagate this and display stop aspect
 
     btfss   inputs,SPDBIT   ; Skip if not special speed (active low) ...
