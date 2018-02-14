@@ -327,7 +327,7 @@ TimingEnd
 
 
     ;******************************************************************
-    ; Run this occupation block state machine
+    ; Run local occupation block state machine
     ;******************************************************************
 
     btfsc   lnkPState,NOPFLG ; Skip if no reception from previous link clear ...
@@ -502,20 +502,6 @@ TrainLeavingR   ; **** State 6 - Train leaving reverse ****
 
 BlockEnd    ; End of signal block state machine
 
-    ; Line reversal can be from input, block logic, or next controller
-    ;******************************************************************
-
-    btfsc   lclCntlr,BRVFLG ; Skip if block not reversed ...
-    bcf     inputs,REVBIT   ; ... else set line reversed input (active low)
-    btfsc   nxtCntlr,LRVFLG ; Skip if next controller line not reversed ...
-    bcf     inputs,REVBIT   ; ... else set line reversed input (active low)
-
-    btfss   inputs,BIDBIT   ; Skip if line bidirectional ...
-    bsf     inputs,REVBIT   ; ... else clear line reversed (active low)
-
-    btfss   inputs,REVBIT   ; Skip if line not reversed (active low) ...
-    bsf     lclCntlr,BRVFLG ; ... else set block reversed
-
 
     ;******************************************************************
     ; Service link with next controller
@@ -576,6 +562,9 @@ CheckNextRx
     goto    NextLinkEnd     ; ... else ignore received data
 
     movwf   nxtCntlr        ; Save received next controller status
+
+    btfsc   nxtCntlr,LRVFLG ; Skip if next controller line not reversed ...
+    bsf     lclCntlr,BRVFLG ; ... else set block reversed
 
     bsf     lnkNState,LNKDIRFLG ; Start replying to next controller
 
@@ -662,6 +651,17 @@ LocalAspectDone
 
 
     ;******************************************************************
+    ; Block reversal can be from block logic, next controller, or input
+    ;******************************************************************
+
+    btfss   inputs,REVBIT   ; Skip if line not reversed (active low) ...
+    bsf     lclCntlr,BRVFLG ; ... else set block reversed
+
+    btfss   inputs,BIDBIT   ; Skip if line bidirectional ...
+    bcf     lclCntlr,BRVFLG ; ... else clear block reversed
+
+
+    ;******************************************************************
     ; Service link with previous controller
     ;******************************************************************
 
@@ -687,7 +687,7 @@ LocalAspectDone
 
 SendAspects
     andlw   ASPMSK          ; Clear bits other than aspect value to send
-    btfss   inputs,REVBIT   ; Skip if line not reversed (active low) ...
+    btfsc   lclCntlr,BRVFLG ; Skip if block not reversed ...
     movlw   LRVMSK          ; ... else propagate this and display stop aspect
 
     btfss   inputs,SPDBIT   ; Skip if not special speed (active low) ...
@@ -756,18 +756,8 @@ CheckPrevRx
     btfsc   FSR,EXTFLG      ; Skip if previous exit detector is off ...
     bsf     lclCntlr,ENTFLG ; ... else entry detector is on
 
-    ; If previous block detects normal running clear local block reversed
-
-    btfss   lclCntlr,PRVFLG ; Skip if previous block was reversed ...
-    goto    SavePrvRvrsl    ; ... else just save current reversal state
-
-    btfss   FSR,BRVFLG      ; Skip if previous block still reversed ...
+    btfss   FSR,BRVFLG      ; Skip if previous block reversed ...
     bcf     lclCntlr,BRVFLG ; ... else clear local block reversed
-
-SavePrvRvrsl
-    bcf     lclCntlr,PRVFLG ; Assume previous block not reversed
-    btfsc   FSR,BRVFLG      ; Skip if previous block not reversed ...
-    bsf     lclCntlr,PRVFLG ; ... else capture previous block now reversed
 
 PrevRxDone
     bsf     lnkPState,LNKDIRFLG ; Resume sending to previous controller

@@ -108,4 +108,3 @@ lclCntlr        ; Status of this controller:
                 ;   bit 4 - Exit detection
                 ;   bit 5 - Entry detection (Exit detection from previous)
                 ;   bit 6 - Block reversed
-                ;   bit 7 - Previous block reversed
