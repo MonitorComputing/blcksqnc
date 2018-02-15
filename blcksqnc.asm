@@ -1,26 +1,11 @@
 ;**********************************************************************
 ;                                                                     *
-;    Description:   Controller for occupation block with positional   *
-;                   train detector at exit.                           *
+;    Description:   Controller for multiple aspect colour light       *
+;                   signal and occupation block with positional train *
+;                   detector at block exit.                           *
 ;                                                                     *
-;                   Receives train detection state from previous (in  *
-;                   rear) controller which it uses as entry detector  *
-;                   for occupation block.                             *
-;                   Sends value of signal aspect (increment of local  *
-;                   value of signal aspect) along with special speed  *
-;                   indication and block reversed to previous         *
-;                   controller.                                       *
-;                                                                     *
-;                   Receives value of signal aspect to be displayed   *
-;                   along with special speed indication and block     *
-;                   reversed from next (in advance) controller.       *
-;                   Sends train detection state to next controller.   *
-;                                                                     *
-;                   If no data is received from next controller link  *
-;                   input is treated as a level input indicating      *
-;                   to display a stop aspect or to cycle aspect from  *
-;                   stop to clear at fixed intervals after the        *
-;                   passing of a train.                               *
+;                   This is a generic specialisation to test common   *
+;                   code.                                             *
 ;                                                                     *
 ;    Author:        Chris White                                       *
 ;    Company:       Monitor Computing Services Ltd.                   *

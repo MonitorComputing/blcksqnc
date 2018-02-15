@@ -1,4 +1,34 @@
 ;**********************************************************************
+;                                                                     *
+;    Author:        Chris White                                       *
+;    Company:       Monitor Computing Services Ltd.                   *
+;                                                                     *
+;**********************************************************************
+;                                                                     *
+;    Copyright (C) 2018  Monitor Computing Services Ltd.              *
+;                                                                     *
+;    This program is free software; you can redistribute it and/or    *
+;    modify it under the terms of the GNU General Public License      *
+;    as published by the Free Software Foundation; either version 2   *
+;    of the License, or any later version.                            *
+;                                                                     *
+;    This program is distributed in the hope that it will be useful,  *
+;    but WITHOUT ANY WARRANTY; without even the implied warranty of   *
+;    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the    *
+;    GNU General Public License for more details.                     *
+;                                                                     *
+;    You should have received a copy of the GNU General Public        *
+;    License (http://www.gnu.org/copyleft/gpl.html) along with this   *
+;    program; if not, write to:                                       *
+;       The Free Software Foundation Inc.,                            *
+;       59 Temple Place - Suite 330,                                  *
+;       Boston, MA  02111-1307,                                       *
+;       USA.                                                          *
+;                                                                     *
+;**********************************************************************
+
+
+;**********************************************************************
 ; Configuration directives
 ;**********************************************************************
 
@@ -11,7 +41,7 @@
 ;  - Power up timer enabled
 ;  - Crystal (resonator) oscillator
 
-    __config   _CP_OFF & _PWRTE_ON & _XT_OSC
+    __config   _CP_OFF & _WDT_ON & _PWRTE_ON & _XT_OSC
 
 ; '__config' directive is used to embed configuration data within .asm file.
 ; The lables following the directive are located in the respective .inc file.
@@ -52,8 +82,8 @@ RAM_Start   EQU     0x0C
 RAM_End     EQU     0x4F
 
 ; I/O port direction masks
-PORTASTATUS EQU     B'00000000'
-PORTBSTATUS EQU     B'00011111'
+PORTASTATUS EQU     B'00000000' ; Configure all as outputs (RB4 open collector)
+PORTBSTATUS EQU     B'00011111' ; RB0 - RB4 inputs, all others outputs
 
 ; Interrupt & timing constants
 RTCCINT     EQU     256 - 100   ; 10KHz = ((4MHz / 4) / 100) (0.1 mSec tick)

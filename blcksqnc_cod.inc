@@ -1,3 +1,119 @@
+;**********************************************************************
+;                                                                     *
+;    Description:                                                     *
+;                                                                     *
+;    Controller for multiple aspect colour light signal and           *
+;    occupation block with positional train detector at block exit.   *
+;                                                                     *
+;    Controller provides drive to emitter and accepts input from      *
+;    sensor of a reflective IR detector. Correspondance is tallied so *
+;    that high and low watermarks can be used to deem when detection  *
+;    takes place. Duration of detection is stretched by approximately *
+;    one second to accomodate gaps between vehicles.                  *
+;                                                                     *
+;    Detection is indicated using an open drain output which is read  *
+;    back so that an alternative detector can be connected as a wired *
+;    or in addition, or as an alternative, to the built in detection. *
+;                                                                     *
+;    Local detection is sent to the next, in advance, controller and  *
+;    hence received by this controller from the previous, in rear,    *
+;    controller.                                                      *
+;                                                                     *
+;    The local block occupation state machine uses the local, exit,   *
+;    and previous, entry, detection to determine if:                  *
+;        The block is clear;                                          *
+;        A train is entering the block in the forward direction;      *
+;        A train is completely contained within the block;            *
+;        A train is leaving the block in the forward direction;       *
+;        A train is spanning the block from entry to exit;            *
+;        A train is entering the block in the reverse direction;      *
+;        A train is leaving the block in the reverse direction.       *
+;                                                                     *
+;    If no data is being received from the previous, in rear,         *
+;    controller the block occupation state machine is not executed as *
+;    there is be no block entry detection available.                  *
+;                                                                     *
+;    The block occupation state machine can automatically determine   *
+;    reverse running is taking place through the local block. Also a  *
+;    line reversed input allows this condition to be forced.          *
+;                                                                     *
+;    The block reversed condition is sent to both the next, in        *
+;    advance, and previous, in rear, controllers. This allows the     *
+;    reversal condition, and restoration to forward running, to be    *
+;    propogated back through a chain of controllers. There is a       *
+;    bidirectional input which stops this propogation at any          *
+;    controller at which the input is not set.                        *
+;                                                                     *
+;    The controller determines the aspects to be displayed by the     *
+;    signal guarding the local occupation block but that signal is    *
+;    located at the previous, in rear, controller and the information *
+;    is sent to that controller for output. Conversely the controller *
+;    receives aspect information to be out put to the local signal    *
+;    from the next, in advance, controller.                           *
+;                                                                     *
+;    If no data is being received from the next, in advance,          *
+;    controller then the sequencing of aspects to display after a     *
+;    train exits the occupation block in the forward direction is     *
+;    simulated.                                                       *
+;                                                                     *
+;    Alternatively the input for the link to the next, in advance,    *
+;    controller can be used to force display of a stop aspect by the  *
+;    local signal.                                                    *
+;                                                                     *
+;    An input can be used to cause the aspect displayed by the local  *
+;    signal to latch at stop. That is once the signal has sequenced   *
+;    to a stop aspect it will not change to any other aspect unless   *
+;    the input is cleared. The default for the input is clear, i.e.   *
+;    the local signal is not latched at stop.                         *
+;                                                                     *
+;    The aspect to be displayed by the signal guarding the local      *
+;    block (connected to the previous, in rear, controller) depends   *
+;    on a number of factors:                                          *
+;        If block is occupied, not clear, display stop;               *
+;        If running is reversed in the block display stop;            *
+;        Otherwise display next aspect in sequence from stop to clear *
+;        after aspect received from next, in advance, controller (or  *
+;        simulated if no link).                                       *
+;                                                                     *
+;    The aspect to be displayed by the local signal guarding the      *
+;    next, in advance, block depends on a number of factors:          *
+;        If signal is inhibited locally display stop;                 *
+;        If signal is latched locally hold at stop once reached;      *
+;        Otherwise display aspect received from next, in advance,     *
+;        controller (or simulated if no link).                        *
+;                                                                     *
+;    There is also a special speed input which can be employed by     *
+;    controller specialisations to display location specific speed    *
+;    specific apsect variations.                                      *
+;                                                                     *
+;    Author:        Chris White                                       *
+;    Company:       Monitor Computing Services Ltd.                   *
+;                                                                     *
+;**********************************************************************
+;                                                                     *
+;    Copyright (C) 2018  Monitor Computing Services Ltd.              *
+;                                                                     *
+;    This program is free software; you can redistribute it and/or    *
+;    modify it under the terms of the GNU General Public License      *
+;    as published by the Free Software Foundation; either version 2   *
+;    of the License, or any later version.                            *
+;                                                                     *
+;    This program is distributed in the hope that it will be useful,  *
+;    but WITHOUT ANY WARRANTY; without even the implied warranty of   *
+;    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the    *
+;    GNU General Public License for more details.                     *
+;                                                                     *
+;    You should have received a copy of the GNU General Public        *
+;    License (http://www.gnu.org/copyleft/gpl.html) along with this   *
+;    program; if not, write to:                                       *
+;       The Free Software Foundation Inc.,                            *
+;       59 Temple Place - Suite 330,                                  *
+;       Boston, MA  02111-1307,                                       *
+;       USA.                                                          *
+;                                                                     *
+;**********************************************************************
+
+
 ; Include serial link interface macros
 ;  - Serial link bit timing is performed by link service routines
 #define CLKD_SERIAL
@@ -51,7 +167,7 @@ RunISR
 
     SrvcLink  lnkPState, serPTimer, INTLNKDLYRX, INTLNKDLYTX, EnableTxP, InitTxP, SrvcTxP, TxBreakP, EnableRxP, InitRxP, SrvcRxP
 
-    ; Run interrupt scaling counter for second timing
+    ; Run interrupt scaling counter for second based timing
     ;******************************************************************
 
     decfsz  intScCount,W    ; Decrement interrupt scaling counter into W
@@ -125,9 +241,6 @@ ExitISR
 
     retfie                  ; return from Interrupt
 
-    ; Run interrupt scaling counter for second timing
-    ;******************************************************************
-
 
 ;**********************************************************************
 ; Subroutine to read EEPROM
@@ -179,8 +292,8 @@ Initialise
     movlw   PORTASTATUS     ; For Port A need to write one to each bit ...
     movwf   PORTA           ; ... being used for input
 
-    bsf     EMTPORT,EMTBIT  ; Ensure detector emmitter is off
-    bsf     DETPORT,DETBIT  ; Ensure detector indicator is off
+    bsf     EMTPORT,EMTBIT  ; Ensure detector emmitter is off (active low)
+    bsf     DETPORT,DETBIT  ; Ensure detector indicator is off (active low)
 
     ; Initialise RAM to zero
     ;******************************************************************
@@ -264,14 +377,14 @@ Timing
     btfsc   DETPORT,DETBIT  ; Bring in detecting input, open drain output
     bsf     FSR,DETBIT
 
-    ; First of all clear all input bits matching (on or off) last read
+    ; First of all clear all input bits matching last read (on or off)
     ; leaving unchanged any inputs bits not matching last read
     movf    FSR,W           ; Get current read
     xorwf   debnce,W        ; Create mask for inputs changed since last read
     andwf   inputs,F        ; Clear inputs bits unchanged since last read
 
-    ; Next set any input bits on for both current and last read
-    ; leaving unchanged any inputs where current doesn't match last read
+    ; Next set any input bits which were on for both current and last read
+    ; leaving unchanged any inputs where current value doesn't match last read
     xorlw   0xFF            ; Create mask for inputs unchanged since last read
     andwf   FSR,W           ; Get current port bits on for both reads
     iorwf   inputs,F        ; Set inputs on for both reads
@@ -300,9 +413,9 @@ Timing
     decfsz  nxtTimer,W      ; Decrement next signal simulation timer into W
     movwf   nxtTimer        ; Update timeout counter if not yet timed out
 
-    ; Check status of train detection input (active low) for off
-    ; (this is only done once a second so detection can be stretched to
-    ;  ignore any gaps between vehicles)
+    ; Check status of train detection input (active low) for off. This
+    ; is only done once a second so detection can be stretched to
+    ; ignore any gaps between vehicles.
     ;******************************************************************
 
     btfss   inputs,DETBIT   ; Skip if detection input is off (active low) ...
@@ -330,7 +443,7 @@ TimingEnd
     ; Run local occupation block state machine
     ;******************************************************************
 
-    btfsc   lnkPState,NOPFLG ; Skip if no reception from previous link clear ...
+    btfsc   lnkPState,NOPFLG ; Skip if receiving data from previous link ...
     goto    BlockEnd         ; ... else don't run block logic
 
     movlw   high BlockTable ; Load jump table address high byte ...
@@ -382,7 +495,7 @@ CheckNtrFwd
 
 TrainEnteringF  ; **** State 1 - Train entering forward ****
 
-    bcf     lclCntlr,BRVFLG ; Clear block reversed
+    bcf     lclCntlr,BRVFLG ; Clear local block reversed
 
 ChkSpnFwd
     ; Check if train now spans this block
@@ -419,7 +532,7 @@ CheckExtFwd
 
 TrainLeavingF   ; **** State 3 - Train leaving forward ****
 
-    bcf     lclCntlr,BRVFLG ; Clear block reversed
+    bcf     lclCntlr,BRVFLG ; Clear local block reversed
 
     ; Check if train has left block
     btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
@@ -435,7 +548,7 @@ ChkTrnRvd
     btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
     goto    BlockEnd    ; ... else remain in current state
 
-    bsf     lclCntlr,BRVFLG ; Set block reversed
+    bsf     lclCntlr,BRVFLG ; Set local block reversed
 
     ; Train detected at block entrance,
     ; next state = 4 - Train spanning block
@@ -463,7 +576,7 @@ CheckTrvRev
 
 TrainEnteringR  ; **** State 5 - Train entering reverse ****
 
-    bsf     lclCntlr,BRVFLG ; Set block reversed
+    bsf     lclCntlr,BRVFLG ; Set local block reversed
 
 ChkSpnRev
     ; Check if train now spans this block
@@ -484,7 +597,7 @@ CheckOccRev
 
 TrainLeavingR   ; **** State 6 - Train leaving reverse ****
 
-    bsf     lclCntlr,BRVFLG ; Set block reversed
+    bsf     lclCntlr,BRVFLG ; Set local block reversed
 
     ; Check if train has changed direction and now spans this block
     movlw   BLOCKSPANNED    ; Possible next state
@@ -568,6 +681,9 @@ CheckNextRx
     MaxLw   INTLINKTMON, 1
     movwf   lnkNTimer       ; Reset link reception timeout
 
+    ; Action line reversal state propogated from next controller
+    ;******************************************************************
+
     btfsc   nxtCntlr,LRVFLG ; Skip if next controller line not reversed ...
     bsf     lclCntlr,BRVFLG ; ... else set local block reversed
 
@@ -604,11 +720,11 @@ NextLinkFailed
     bcf     nxtCntlr,LRVFLG ; Clear next block line reversed flag
     bcf     nxtCntlr,SPDFLG ; Clear next signal special speed flag
 
-    btfss   lclCntlr,BRVFLG ; Ignore detection if block reversed ...
+    btfss   lclCntlr,BRVFLG ; Ignore exit detection if local block reversed ...
     btfsc   inputs,DETBIT   ; ... skip if exit detection on (active low) ...
     goto    RunNextSignal   ; ... else run next signal simulation
 
-    ; Exit detection for nromal running so set simulated next signal aspect
+    ; Exit detection whilst normal running so set simulated next signal aspect
     ; value to stop and reset the aspect timer to simulate train traversing
     ; next block
     movlw   ~ASPMSK
@@ -659,7 +775,7 @@ LocalAspectDone
 
 
     ;******************************************************************
-    ; Line reversal can be from input, next controller, or block logic
+    ; Line reversal can be from input or local block reversal
     ;******************************************************************
 
     btfsc   lclCntlr,BRVFLG ; Skip if local block not reversed ...
@@ -680,8 +796,8 @@ LocalAspectDone
     ;******************************************************************
 
     ; Local block's signal aspect value (displayed by previous controller)
-    ; depends on the aspect value of the local signal, unless the line is
-    ; reversed or the block is occupied (not clear).
+    ; depends on the aspect value of the local signal, unless the local block
+    ; is occupied (not clear) or the line is reversed.
 
     movlw   BLKSTATE
     andwf   lclCntlr,W      ; Test block state of local block
