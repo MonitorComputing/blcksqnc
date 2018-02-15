@@ -114,13 +114,6 @@
 ;**********************************************************************
 
 
-; Include serial link interface macros
-;  - Serial link bit timing is performed by link service routines
-#define CLKD_SERIAL
-#include "utility/asyn_srl.inc"
-#include "utility/link_hd.inc"
-
-
 ;**********************************************************************
 ; Reset vector
 ;**********************************************************************
