@@ -32,7 +32,7 @@
 ; Configuration directives
 ;**********************************************************************
 
-    list      p=16F84
+    list      r=dec,p=16F84
 
 #include "p16f84.inc"
 ; Configuration word
@@ -41,7 +41,7 @@
 ;  - Power up timer enabled
 ;  - Crystal (resonator) oscillator
 
-    __config   _CP_OFF & _WDT_ON & _PWRTE_ON & _XT_OSC
+    __config   _CP_OFF & _WDT_OFF & _PWRTE_ON & _XT_OSC
 
 ; '__config' directive is used to embed configuration data within .asm file.
 ; The lables following the directive are located in the respective .inc file.
@@ -86,20 +86,20 @@ PORTASTATUS EQU     B'00000000' ; Configure all as outputs (RB4 open collector)
 PORTBSTATUS EQU     B'00011111' ; RB0 - RB4 inputs, all others outputs
 
 ; Interrupt & timing constants
-RTCCINT     EQU     256 - 100   ; 10KHz = ((4MHz / 4) / 100) (0.1 mSec tick)
+RTCCINT     EQU     256 - 200   ; 5KHz = ((4MHz / 4) / 200) (0.2 mSec tick)
 
 ; Timing constants
-INTSCLNG    EQU     80 + 1      ; Interrupts scaling to 125Hz (8 mSec tick)
-SECSCLNG    EQU     125         ; Scaled interrupts per second
+INTSCLNG    EQU     40 + 1      ; Interrupts scaling to 125Hz (8 mSec tick)
+SECSCLNG    EQU     125 + 1     ; Scaled interrupts per second
 HALFSEC     EQU     B'11000000' ; Roughly half second scaled interrupts mask
 
-INTSERINI   EQU     6           ; Interrupts per initial Rx serial bit @ 2K5
-INTSERBIT   EQU     4           ; Interrupts per serial bit @ 2K5 baud
+INTSERINI   EQU     6           ; Interrupts per initial Rx serial bit @ 1K25
+INTSERBIT   EQU     4           ; Interrupts per serial bit @ 1K25 baud
 INTLNKDLYRX EQU     0           ; Interrupts for link Rx turnaround delay
 INTLNKDLYTX EQU     10          ; Interrupts for link Tx turnaround delay
 
 INTLINKTMOP EQU     5           ; Scaled interrupts, previous link timeout
-INTLINKTMON EQU     25          ; Scaled interrupts, next link timeout
+INTLINKTMON EQU     50          ; Scaled interrupts, next link timeout
 
 ; Next controller link serial interface ports
 RXNTRIS     EQU     TRISB       ; Rx port direction register
