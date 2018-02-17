@@ -135,9 +135,11 @@ BeginISR
     movwf   w_isr           ; Save off current W register contents
     swapf   STATUS,W        ; Swap status register into W register
     BANKSEL TMR0            ; Ensure register page 0 is selected
-    movwf   status_isr      ; save off contents of STATUS register
+    movwf   status_isr      ; Save off contents of STATUS register
+    movf    FSR,W           ; Move FSR register into W register
+    movwf   fsr_isr         ; Save off contents of FSR register
     movf    PCLATH,W        ; Move PCLATH register into W register
-    movwf   pclath_isr      ; save off contents of PCLATH register
+    movwf   pclath_isr      ; Save off contents of PCLATH register
     movlw   high BeginISR   ; Load ISR address high byte ...
     movwf   PCLATH          ; ... into PCLATH to set code block
 
@@ -147,7 +149,7 @@ BeginISR
 RunISR
     ; Re-enable the timer interrupt and reload the timer
     bcf     INTCON,T0IF     ; Reset the TMR0 Interrupt bit
-    movlw   low RTCCINT + 2 ; Allow 2 cycles for TMR0 write inhibit
+    movlw   low RTCCINT + 3 ; Add 3 cycles for TMR0 write increment and inhibit
     addwf   TMR0,F          ; Reload TMR0
 
     ; Service next controller link
@@ -227,6 +229,8 @@ SensorEnd
 ExitISR
     movf    pclath_isr,W    ; Retrieve copy of PCLATH register
     movwf   PCLATH          ; Restore pre-isr PCLATH register contents
+    movf    fsr_isr,W       ; Retrieve copy of FSR register
+    movwf   FSR             ; Restore pre-isr FSR register contents
     swapf   status_isr,W    ; Swap copy of STATUS register into W register
     movwf   STATUS          ; Restore pre-isr STATUS register contents
     swapf   w_isr,F         ; Swap pre-isr W register value nibbles
@@ -317,6 +321,11 @@ ClearRAM
     call    ReadEEPROM
     movwf   aspectTime      ; Initialise aspect interval for next signal
     movwf   nxtTimer        ; Initialise timer used to simulate next signal
+
+    movlw   INTSCLNG        ; Initialise interrupt ...
+    movwf   intScCount      ; ...  scaling counter
+    movlw   low SECSCLNG    ; Initialise one second ...
+    movwf   secCount        ; ... scaled interrupts counter
 
     ; Optional initialisation (user code should define UserInit macro)
     ;******************************************************************
