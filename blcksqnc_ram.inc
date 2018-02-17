@@ -36,8 +36,9 @@
 
 ; Status and accumulator storage during interrupt
 w_isr           ; 'w' register, accumulator, store during ISR
+status_isr      ; STATUS register store during ISR
+fsr_isr         ; FSR register store during ISR
 pclath_isr      ; PCLATH register store during ISR
-status_isr      ; status register store during ISR
 
 
 ; Serial interface
