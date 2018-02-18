@@ -188,7 +188,7 @@ LRVMSK      EQU     B'00100000' ; Line reversed state bit mask
 ASPPORT     EQU     PORTA       ; Aspect output port
 STPMSK      EQU     B'00000001' ; Mask for stop aspect output bit
 CL1MSK      EQU     B'00000010' ; Mask for clear1 aspect output bit
-CL2MSK      EQU     B'00000100' ; Mask for clear2 yellow aspect output bit
+CL2MSK      EQU     B'00000100' ; Mask for clear2 aspect output bit
 CLRMSK      EQU     B'00001000' ; Mask for clear aspect output bit
 ASPOUTMSK   EQU     B'00001111' ; Mask for aspect output bits
 
