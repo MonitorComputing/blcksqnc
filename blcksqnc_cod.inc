@@ -646,6 +646,9 @@ BlockEnd    ; End of signal block state machine
     btfsc   STATUS,Z        ; Skip if data not sent ...
     bcf     lnkNState,LNKDIRFLG ; ... else resume listening to next controller
 
+    MaxLw   INTLINKTMON, 1
+    movwf   lnkNTimer       ; Start reception timeout
+
     goto    NextLinkEnd
 
 CheckNextRx
@@ -654,9 +657,18 @@ CheckNextRx
 
     call    LinkRxN         ; Check for data from next controller
     btfss   STATUS,Z        ; Skip if data received ...
-    goto    NextRxEnd       ; ... else skip over next controller receive
+    goto    NextRxSkip      ; ... else skip over next controller receive
 
-    movwf   FSR             ; Save the received data
+    ; Only four bits of status (aspect value, line reversed, and special speed)
+    ; are received so as a simple error check these are sent in low nibble with
+    ; ones complement in high nibble.
+
+    movwf   FSR             ; Store the received data
+    swapf   FSR,W           ; Status bits - high nibble, complement - low nibble
+    comf    FSR,F           ; Complement - high nibble, status bits - low nibble
+    xorwf   FSR,F           ; Exclusive or received data with complement
+    btfss   STATUS,Z        ; Skip if result is zero, i.e. data is ok ...
+    goto    NextLinkEnd     ; ... else ignore received data
 
     ; As a simple error check received data is ignored unless same value
     ; received twice in succession
@@ -666,22 +678,13 @@ CheckNextRx
     btfss   STATUS,Z        ; Skip if last and just received data match ...
     goto    NextLinkEnd     ; ... else ignore just received data
 
-    ; Only four bits of status (aspect value, line reversed, and special speed)
-    ; are received so as a simple error check these are sent in low nibble with
-    ; ones complement in high nibble.
-
-    swapf   FSR,W           ; Status bits - high nibble, complement - low nibble
-    comf    FSR,F           ; Complement - high nibble, status bits - low nibble
-    xorwf   FSR,F           ; Exclusive or received data with complement
-    btfss   STATUS,Z        ; Skip if result is zero, i.e. data is ok ...
-    goto    NextLinkEnd     ; ... else ignore received data
+#ifdef UserNextRx
+    UserNextRx
+#endif
 
     movwf   nxtCntlr        ; Save received next controller status
 
     bsf     lnkNState,LNKDIRFLG ; Start replying to next controller
-
-    MaxLw   INTLINKTMON, 1
-    movwf   lnkNTimer       ; Reset link reception timeout
 
     ; Action line reversal state propogated from next controller
     ;******************************************************************
@@ -699,7 +702,7 @@ CheckNextRx
 
     goto    NextLinkEnd
 
-NextRxEnd
+NextRxSkip
 
     ; Test if next controller link has timedout
     ;******************************************************************
@@ -764,7 +767,7 @@ NextLinkEnd
     goto    SetLocalAspect  ; ... otherwise set local aspect
 
     btfss   inputs,LCHBIT   ; Skip if latch input is off (active low) ...
-    goto    LocalAspectDone ; ... otherwise leave local aspect = stop
+    goto    SkipLocalAspect ; ... otherwise leave local aspect = stop
 
 SetLocalAspect
     movlw   ASPMSK
@@ -772,8 +775,9 @@ SetLocalAspect
     btfss   inputs,INHBIT   ; Skip if signal is not inhibited (active low) ...
     clrw                    ; ... otherwise set aspect = stop
 
-LocalAspectDone
     movwf   aspVal          ; Save aspect display value
+
+SkipLocalAspect
 
 
     ;******************************************************************
@@ -813,7 +817,7 @@ LocalAspectDone
 
 SendAspects
     andlw   ASPMSK          ; Clear bits other than aspect value to send
-    btfss   inputs,REVBIT   ; Skip if line not (active low) reversed ...
+    btfss   inputs,REVBIT   ; Skip if line not reversed (active low) ...
     movlw   LRVMSK          ; ... else propagate this and display stop aspect
 
     btfss   inputs,SPDBIT   ; Skip if not special speed (active low) ...
@@ -854,7 +858,16 @@ CheckPrevRx
     btfss   STATUS,Z        ; Skip if data received ...
     goto    PrevLinkEnd     ; ... else continue waiting for reply
 
+    ; Only three bits of status (entry detection, exit detection, and block
+    ; reversed) are received so as a simple error check these are sent in low
+    ; nibble with ones complement in high nibble
+
     movwf   FSR             ; Store the received data
+    swapf   FSR,W           ; Status bits - high nibble, complement - low nibble
+    comf    FSR,F           ; Complement - high nibble, status bits - low nibble
+    xorwf   FSR,F           ; Exclusive or received data with complement
+    btfss   STATUS,Z        ; Skip if result is zero, i.e. data is ok ...
+    goto    PrevLinkEnd      ; ... else ignore just received data
 
     ; As a simple error check received data is ignored unless same value
     ; received twice in succession
@@ -864,20 +877,10 @@ CheckPrevRx
     btfss   STATUS,Z        ; Skip if last and just received data match ...
     goto    PrevLinkEnd     ; ... else ignore just received data
 
-    ; Only three bits of status (entry detection, exit detection, and block
-    ; reversed) are received so as a simple error check these are sent in low
-    ; nibble with ones complement in high nibble
-
-    swapf   FSR,W           ; Status bits - high nibble, complement - low nibble
-    comf    FSR,F           ; Complement - high nibble, status bits - low nibble
-    xorwf   FSR,F           ; Exclusive or received data with complement
-    btfss   STATUS,Z        ; Skip if result is zero, i.e. data is ok ...
-    goto    PrevLinkEnd      ; ... else ignore just received data
-
     bcf     lnkPState,NOPFLG ; Clear no reception from previous link flag
-    movwf   FSR             ; Store the received status for bit tests
 
     ; Previous exit detection is local entry detection
+    movwf   FSR             ; Copy the received status for bit tests
     bcf     lclCntlr,ENTFLG ; Assume entry detector is off
     btfsc   FSR,EXTFLG      ; Skip if previous exit detector is off ...
     bsf     lclCntlr,ENTFLG ; ... else entry detector is on
