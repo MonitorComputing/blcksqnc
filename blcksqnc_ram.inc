@@ -91,8 +91,8 @@ telemPrv        ; Data previously received from previous controller
 
 
 ; Timing
-intScCount      ; Interrupt counter for scaled timing
-secCount        ; Scaled interrupts counter for second timing
+intScCount      ; Interrupt counter for down scaled timing
+secCount        ; Down scaled interrupts counter for second timing
 
 aspectTime      ; Aspect interval for simulating next signal
 nxtTimer        ; Second counter for simulating next signal
@@ -118,7 +118,7 @@ aspVal          ; Value indicating aspects to display (not actual ouptut)
 ; Block and signal control
 nxtCntlr        ; Status received from next (in advance) controller:
                 ;   bits 0 - 3 - Ignored bits 4 to 7 ones complement
-                ;   bit 4      - Special speed
+                ;   bit 4      - Normal speed
                 ;   bit 5      - Line reversed
                 ;   bits 6,7   - Aspect value
                 ;     0 - Stop
