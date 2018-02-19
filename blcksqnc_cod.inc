@@ -365,7 +365,7 @@ Timing
     ; service routine) the count is tested and if found to be 1 it is reset
     ; and the various timing operations are performed.
 
-    ; Scale interrupts to lower than 10KHz
+    ; Scaled down interrupts timing
     ;******************************************************************
 
     decfsz  intScCount,W    ; Test interrupts scaling counter
@@ -428,7 +428,7 @@ Timing
     goto    TimingEnd       ; ... else skip stretching of exit detection
 
     btfsc   lclCntlr,STRFLG ; Skip if exit detection has not been stretched ...
-    bcf     lclCntlr,EXTFLG ; ... else set exit detection state to off
+    bcf     lclCntlr,EXTFLG ; ... else clear exit detection state to off
 
     bsf     lclCntlr,STRFLG ; Set exit detection stretched flag
 
@@ -634,7 +634,16 @@ BlockEnd    ; End of signal block state machine
 
     movf    lclCntlr,W      ; Send local controller status
 
-    ; Only three bits of status (exit detection, entry detection, and block
+    ; Local exit detection is also sent as approach detection
+    andlw   ~APRMSK         ; Default is send approach detection off
+    btfsc   lclCntlr,EXTFLG ; Skip if local exit detection is off ...
+    iorlw   APRMSK          ; ... else send approach detection on
+
+#ifdef UserNextTx
+    UserNextTx
+#endif
+
+    ; Only three bits of status (exit detection, approach detection, and block
     ; reversed) are sent so as a simple error check these are sent in low
     ; nibble with ones complement in high nibble
 
@@ -691,6 +700,9 @@ CheckNextRx
     bsf     lnkNState,LNKDIRFLG ; Start replying to next controller
 
     ; Action line reversal state propogated from next controller
+    ;   If next controller line reversed then reverse local block
+    ;   If next controller line normal and local block clear then
+    ;   unreverse local block
     ;******************************************************************
 
     btfsc   nxtCntlr,LRVFLG ; Skip if next controller line not reversed ...
@@ -779,13 +791,17 @@ SetLocalAspect
     btfss   inputs,INHBIT   ; Skip if signal is not inhibited (active low) ...
     clrw                    ; ... otherwise set aspect = stop
 
+#ifdef UserAspect
+    UserAspect
+#endif
+
     movwf   aspVal          ; Save aspect display value
 
 SkipLocalAspect
 
 
     ;******************************************************************
-    ; Line reversal can be from input or local block reversal
+    ; Line reversal can be from input or local block reversal logic
     ;******************************************************************
 
     btfsc   lclCntlr,BRVFLG ; Skip if local block not reversed ...
@@ -824,10 +840,14 @@ SendAspects
     btfss   inputs,REVBIT   ; Skip if line not reversed (active low) ...
     movlw   LRVMSK          ; ... else propagate this and display stop aspect
 
-    btfsc   inputs,SPDBIT   ; Skip if not normal speed ...
-    iorlw   SPDMSK          ; ... else propagate this to previous controller
+    btfsc   inputs,SPDBIT   ; Skip if local signal not normal speed ...
+    iorlw   SPDMSK          ; ... else send normal speed to previous controller
 
-    ; Only aspect value, line reversed, and special speed are sent so as a
+#ifdef UserPreviousTx
+    UserPreviousTx
+#endif
+
+    ; Only aspect value, line reversed, and normal speed are sent so as a
     ; simple error check these are sent in low nibble with ones complement in
     ; high nibble.
 
@@ -862,7 +882,7 @@ CheckPrevRx
     btfss   STATUS,Z        ; Skip if data received ...
     goto    PrevLinkEnd     ; ... else continue waiting for reply
 
-    ; Only three bits of status (entry detection, exit detection, and block
+    ; Only three bits of status (entry detection, approach detection, and block
     ; reversed) are received so as a simple error check these are sent in low
     ; nibble with ones complement in high nibble
 
@@ -882,6 +902,10 @@ CheckPrevRx
     goto    PrevLinkEnd     ; ... else ignore just received data
 
     bcf     lnkPState,NOPFLG ; Clear no reception from previous link flag
+
+#ifdef UserPreviousRx
+    UserPreviousRx
+#endif
 
     ; Previous exit detection is local entry detection
     movwf   FSR             ; Copy the received status for bit tests
