@@ -132,6 +132,9 @@
             org IntVector   ; Interrupt vector location
 
 BeginISR
+    btfss   INTCON,T0IF     ; Skip if TMR0 overflow interrupt ...
+    retfie                  ; ... else skip service routine
+
     movwf   w_isr           ; Save off current W register contents
     swapf   STATUS,W        ; Swap status register into W register
     BANKSEL TMR0            ; Ensure register page 0 is selected
@@ -143,13 +146,10 @@ BeginISR
     movlw   high BeginISR   ; Load ISR address high byte ...
     movwf   PCLATH          ; ... into PCLATH to set code block
 
-    btfss   INTCON,T0IF     ; Skip if TMR0 overflow interrupt ...
-    goto    ExitISR         ; ... else skip service routine
-
 RunISR
     ; Re-enable the timer interrupt and reload the timer
     bcf     INTCON,T0IF     ; Reset the TMR0 Interrupt bit
-    movlw   low RTCCINT + 3 ; Add 3 cycles for TMR0 write increment and inhibit
+    movlw   RTCCINT + 3     ; Add 3 cycles for TMR0 write increment and inhibit
     addwf   TMR0,F          ; Reload TMR0
 
     ; Service next controller link
@@ -162,7 +162,7 @@ RunISR
 
     SrvcLink  lnkPState, serPTimer, INTLNKDLYRX, INTLNKDLYTX, EnableTxP, InitTxP, SrvcTxP, TxBreakP, EnableRxP, InitRxP, SrvcRxP
 
-    ; Run interrupt scaling counter for second based timing
+    ; Run interrupt scaling counter for down scaled timing
     ;******************************************************************
 
     decfsz  intScCount,W    ; Decrement interrupt scaling counter into W
@@ -173,41 +173,48 @@ RunISR
 
     ; Detector is designed to float at 2.5V, just above TTL off threshold and
     ; filtered to ignore low frequency signals in order to reject ambient light
-    ; sources. Hence will be on if no train present (and interence from ambient
-    ; light) or emitter is on and will only be off when train is present and
-    ; emitter is off.
+    ; sources. Hence 
+    ; If emmitter is on detector on could mean train present or inteference
+    ; from ambient light whereas detector off means no train present.
+    ; If emitter is off detector on means interence from ambient light whereas
+    ; detector off has no significance.
 
-    btfss   EMTPORT,EMTBIT  ; Skip is emitter is off (active low)...
-    goto    EmitterOn       ; ... else ignore sensor
+    movf    SNSPORT,W       ; Get sensor state ...
+    movwf   FSR             ; ... and save for testing later
+
+;    btfss   EMTPORT,EMTBIT  ; Skip is emitter is off (active low)...
+    btfsc   EMTPORT,EMTBIT  ; Skip is emitter is off (active low)...
+    goto    EmitterOn       ; ... else check for sensor on
 
 EmitterOff
-    btfsc   SNSPORT,SNSBIT  ; Skip if sensor is off ...
-    goto    SensorOn        ; ... else jump as sensor not in correspondence
+;    bcf     EMTPORT,EMTBIT  ; Turn emitter on (active low)
+    bsf     EMTPORT,EMTBIT  ; Turn emitter on (active low)
+    btfss   FSR,SNSBIT      ; Skip if sensor is on due ambient light ...
+    goto    DetectEnd       ; ... else train presence is indeternimable
 
 SensorOff
-    ; Sensing presence of train
-    incf    snsAcc,W        ; Increment sensor match accumulator into W
+    ; Absence of train or false detection due ambient light
+    decfsz  snsAcc,W        ; Decrement sensor match accumulator into W
     movwf   snsAcc          ; If result is not zero update the accumulator
-    btfsc   snsAcc,INPACTV  ; Skip if below on threshold ...
-    bcf     DETPORT,DETBIT  ; ... else turn detector indicator on (active low)
-    goto    EmitterOffEnd
-
-SensorOn
-    ; Detecting absence of train
-    decf    snsAcc,W        ; Decrement sensor match accumulator into W
-    btfss   STATUS,Z        ; Skip if result is zero ...
-    movwf   snsAcc          ; ... else update the accumulator
-    btfsc   STATUS,Z        ; Skip if above off threshold ...
-    bsf     DETPORT,DETBIT  ; ... else turn detector indicator off (active low)
-
-EmitterOffEnd
-    bcf     EMTPORT,EMTBIT  ; Turn emitter on (active low)
-    goto    SensorEnd
+    decfsz  snsAcc,W        ; Skip if accumulator below low water ...
+    goto    DetectEnd       ; ... else leave detector indicator unchanged
+    bsf     DETPORT,DETBIT  ; Turn detector indicator off (active low)
+    goto    DetectEnd
 
 EmitterOn
-    bsf     EMTPORT,EMTBIT  ; Turn emitter off (active low)
+;    bsf     EMTPORT,EMTBIT  ; Turn emitter off (active low)
+    bcf     EMTPORT,EMTBIT  ; Turn emitter off (active low)
+    btfss   FSR,SNSBIT      ; Skip if sensor is on ...
+    goto    SensorOff       ; ... else jump as sensor not detecting
 
-SensorEnd
+SensorOn
+    ; Possible presence of train
+    incfsz  snsAcc,W        ; Increment sensor match accumulator into W
+    movwf   snsAcc          ; If result is not zero update the accumulator
+    btfsc   snsAcc,INPACTV  ; Skip if accumulator below high water ...
+    bcf     DETPORT,DETBIT  ; ... else turn detector indicator on (active low)
+
+DetectEnd
 
     ; Output aspect display without altering non aspect bits on port
     ;******************************************************************
@@ -324,7 +331,7 @@ ClearRAM
 
     movlw   INTSCLNG        ; Initialise interrupt ...
     movwf   intScCount      ; ...  scaling counter
-    movlw   low SECSCLNG    ; Initialise one second ...
+    movlw   SECSCLNG        ; Initialise one second ...
     movwf   secCount        ; ... scaled interrupts counter
 
     ; Optional initialisation (user code should define UserInit macro)
@@ -336,7 +343,7 @@ ClearRAM
     ; Initialise interrupts
     ;******************************************************************
 
-    movlw   low RTCCINT
+    movlw   RTCCINT
     movwf   TMR0            ; Initialise TMR0 for timer interrupts
     clrf    INTCON          ; Disable all interrupt sources
     bsf     INTCON,T0IE     ; Enable TMR0 interrupts
@@ -409,7 +416,7 @@ Timing
     decfsz  secCount,F      ; Decrement seconds scaled interrupts counter ...
     goto    TimingEnd       ; ... skipping this jump if it has reached zero
 
-    movlw   low SECSCLNG    ; Reload one second ...
+    movlw   SECSCLNG        ; Reload one second ...
     movwf   secCount        ; ... scaled interrupts counter
 
     decfsz  nxtTimer,W      ; Decrement next signal simulation timer into W
@@ -722,8 +729,8 @@ NextLinkFailed
     ; Next controller link timed out, simulate next signal sequencing
     ;******************************************************************
 
-    bcf     nxtCntlr,LRVFLG ; Clear next block line reversed flag
-    bcf     nxtCntlr,SPDFLG ; Clear next signal special speed flag
+    bcf     nxtCntlr,LRVFLG ; Clear next block line reversed
+    bsf     nxtCntlr,SPDFLG ; Set next signal normal speed
 
     btfss   lclCntlr,BRVFLG ; Ignore exit detection if local block reversed ...
     btfsc   inputs,DETBIT   ; ... skip if exit detection on (active low) ...
@@ -820,7 +827,7 @@ SendAspects
     btfss   inputs,REVBIT   ; Skip if line not reversed (active low) ...
     movlw   LRVMSK          ; ... else propagate this and display stop aspect
 
-    btfss   inputs,SPDBIT   ; Skip if not special speed (active low) ...
+    btfsc   inputs,SPDBIT   ; Skip if not normal speed ...
     iorlw   SPDMSK          ; ... else propagate this to previous controller
 
     ; Only aspect value, line reversed, and special speed are sent so as a
