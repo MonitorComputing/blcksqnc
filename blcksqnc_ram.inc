@@ -101,11 +101,11 @@ nxtTimer        ; Second counter for simulating next signal
 ; Inputs
 debnce          ; Previous read values used to debounce inputs
 inputs          ; Input values after debouncing:
-                ;   bit 0 - Latch signal on (active low)
+                ;   bit 0 - Latch local signal on (active low)
                 ;   bit 1 - Line reversed (active low)
-                ;   bit 2 - Line is bidirectional, else suppress line reversed
-                ;   bit 3 - Show special speed aspects (active low)
-                ;   bit 4 - Detecting (active low)
+                ;   bit 2 - Line is bidirectional, else suppress line reversal
+                ;   bit 3 - Local signal to show normal speed aspects
+                ;   bit 4 - Detecting (active low), open drain output (wired or)
                 ;   bit 7 - Inhibit, display stop aspect (active low)
 
 snsAcc          ; Detector sensor match (emitter state) accumulator
@@ -118,16 +118,16 @@ aspVal          ; Value indicating aspects to display (not actual ouptut)
 ; Block and signal control
 nxtCntlr        ; Status received from next (in advance) controller:
                 ;   bits 0 - 3 - Ignored bits 4 to 7 ones complement
-                ;   bit 4      - Normal speed
+                ;   bit 4      - Next signal displaying normal speed aspects
                 ;   bit 5      - Line reversed
-                ;   bits 6,7   - Aspect value
+                ;   bits 6,7   - Aspect value, local signal guards next block
                 ;     0 - Stop
                 ;     1 - Clear1
                 ;     2 - Clear2
                 ;     3 - Clear
 
 lclCntlr        ; Status of this controller:
-                ;   bits 0 - 2 - Occupation block state
+                ;   bits 0 - 2 - Local occupation block state
                 ;     0 - Block clear
                 ;     1 - Train entering forward
                 ;     2 - Train in block
@@ -138,4 +138,5 @@ lclCntlr        ; Status of this controller:
                 ;   bit 3 - Exit detection stretched
                 ;   bit 4 - Exit detection
                 ;   bit 5 - Entry detection (Exit detection from previous)
-                ;   bit 6 - Block reversed
+                ;   bit 6 - Local block reversed
+                ;   bit 7 - Unused

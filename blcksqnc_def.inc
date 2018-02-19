@@ -199,7 +199,11 @@ ENTMSK      EQU     B'00100000' ; Entrance detection state bit mask
 BRVFLG      EQU     6           ; Block reversed bit in status byte
 BRVMSK      EQU     B'01000000' ; Block reversed state bit mask
 
-; Next and Previous controllers common (received and sent) status flags
+; Status flags sent to next controller, received from previous controller
+APRFLG      EQU     5           ; Approach detection bit in status byte
+APRMSK      EQU     B'00100000' ; Approach detection state bit mask
+
+; Status flags sent to previous controller, received from next controller
 SPDFLG      EQU     4           ; Normal speed bit in status byte
 SPDMSK      EQU     B'00010000' ; Normal speed state bit mask
 LRVFLG      EQU     5           ; Line reversed bit in status byte
