@@ -90,16 +90,16 @@ RTCCINT     EQU     256 - 200   ; 5KHz = ((4MHz / 4) / 200) (0.2 mSec tick)
 
 ; Timing constants
 INTSCLNG    EQU     40 + 1      ; Interrupts scaling to 125Hz (8 mSec tick)
-SECSCLNG    EQU     125 + 1     ; Scaled interrupts per second
-HALFSEC     EQU     B'11000000' ; Roughly half second scaled interrupts mask
+SECSCLNG    EQU     125 + 1     ; Down scaled interrupts per second
+HALFSEC     EQU     B'11000000' ; Seconds timer roughly half second mask
 
 INTSERINI   EQU     6           ; Interrupts per initial Rx serial bit @ 1K25
 INTSERBIT   EQU     4           ; Interrupts per serial bit @ 1K25 baud
 INTLNKDLYRX EQU     0           ; Interrupts for link Rx turnaround delay
 INTLNKDLYTX EQU     10          ; Interrupts for link Tx turnaround delay
 
-INTLINKTMOP EQU     5           ; Scaled interrupts, previous link timeout
-INTLINKTMON EQU     50          ; Scaled interrupts, next link timeout
+INTLINKTMOP EQU     5           ; Down scaled interrupts, previous link timeout
+INTLINKTMON EQU     50          ; Down scaled interrupts, next link timeout
 
 ; Next controller link serial interface ports
 RXNTRIS     EQU     TRISB       ; Rx port direction register
@@ -160,13 +160,34 @@ TRAINLEAVINGR  EQU  6           ; Train leaving reverse
 BLKSTATE       EQU  B'00000111' ; Mask to isolate block state value
 
 ; Aspect values
-ASPSTP      EQU     B'00000000' ; Stop aspect value
-ASPCL1      EQU     B'01000000'
-ASPCL2      EQU     B'10000000'
-ASPCLR      EQU     B'11000000' ; Clear aspect value
-ASPCLFLG    EQU     7           ; Clear aspect value flag bit
-ASPINCR     EQU     B'01000000' ; Aspect value increment
+ASPSTP      EQU     B'00000000' ; Stop
+ASPWR1      EQU     B'01000000' ; Warning 1, next signal at stop
+ASPWR2      EQU     B'10000000' ; Warning 2, next signal at warning 1
+ASPCLR      EQU     B'11000000' ; Clear, next signal at warning 1 or clear
+ASPW2FLG    EQU     7           ; Warning 2 aspect value flag bit
 ASPMSK      EQU     B'11000000' ; Aspect value mask
+ASPINCR     EQU     B'01000000' ; Aspect value increment
+
+; Aspect output constants
+ASPPORT     EQU     PORTA       ; Aspect output port
+ASPOUTMSK   EQU     B'00001111' ; Mask for aspect output bits
+
+; Input bits, PORTB
+LCHBIT      EQU     0           ; Latch stop aspect (active low)
+REVBIT      EQU     1           ; Line reversed, force stop aspect (active low)
+BIDBIT      EQU     2           ; Running line is bidirectional
+SPDBIT      EQU     3           ; Display normal speed aspects
+INHBIT      EQU     7           ; Inhibit, forced stop aspect (active low)
+INPMSK      EQU     B'10001111' ; Mask for input bits
+
+; Detector I/O constants
+EMTPORT     EQU     PORTB       ; Emitter drive port
+EMTBIT      EQU     5           ; Emmitter drive bit (active low)
+SNSPORT     EQU     PORTB       ; Sensor input port
+SNSBIT      EQU     4           ; Sensor input bit (active high)
+DETPORT     EQU     PORTA       ; Detection indicator port
+DETBIT      EQU     4           ; Detection indicator bit (active low)
+INPACTV     EQU     7           ; Correspondance accumulator >= high water bit
 
 ; Local controller status flags
 STRFLG      EQU     3           ; Exit detection stretched bit in status byte
@@ -179,28 +200,7 @@ BRVFLG      EQU     6           ; Block reversed bit in status byte
 BRVMSK      EQU     B'01000000' ; Block reversed state bit mask
 
 ; Next and Previous controllers common (received and sent) status flags
-SPDFLG      EQU     4           ; Special speed bit in status byte
-SPDMSK      EQU     B'00010000' ; Special speed state bit mask
+SPDFLG      EQU     4           ; Normal speed bit in status byte
+SPDMSK      EQU     B'00010000' ; Normal speed state bit mask
 LRVFLG      EQU     5           ; Line reversed bit in status byte
 LRVMSK      EQU     B'00100000' ; Line reversed state bit mask
-
-; Aspect output constants
-ASPPORT     EQU     PORTA       ; Aspect output port
-ASPOUTMSK   EQU     B'00001111' ; Mask for aspect output bits
-
-; Input bits, PORTB
-LCHBIT      EQU     0           ; Latch stop aspect (active low)
-REVBIT      EQU     1           ; Line reversed, force stop aspect (active low)
-BIDBIT      EQU     2           ; Running line is bidirectional
-SPDBIT      EQU     3           ; Display special speed aspects (active low)
-INHBIT      EQU     7           ; Inhibit, forced stop aspect (active low)
-INPMSK      EQU     B'10001111' ; Mask for input bits
-
-; Detector I/O constants
-EMTPORT     EQU     PORTB       ; Emitter drive port
-EMTBIT      EQU     5           ; Emmitter drive bit (active low)
-SNSPORT     EQU     PORTB       ; Sensor input port
-SNSBIT      EQU     4           ; Sensor input bit (active high)
-DETPORT     EQU     PORTA       ; Detection indicator port
-DETBIT      EQU     4           ; Detection indicator bit (active low)
-INPACTV     EQU     7           ; Correspondance accumulator >= high water bit
