@@ -182,13 +182,11 @@ RunISR
     movf    SNSPORT,W       ; Get sensor state ...
     movwf   FSR             ; ... and save for testing later
 
-;    btfss   EMTPORT,EMTBIT  ; Skip is emitter is off (active low)...
-    btfsc   EMTPORT,EMTBIT  ; Skip is emitter is off (active low)...
+    btfss   EMTPORT,EMTBIT  ; Skip is emitter is off (active low)...
     goto    EmitterOn       ; ... else check for sensor on
 
 EmitterOff
-;    bcf     EMTPORT,EMTBIT  ; Turn emitter on (active low)
-    bsf     EMTPORT,EMTBIT  ; Turn emitter on (active low)
+    bcf     EMTPORT,EMTBIT  ; Turn emitter on (active low)
     btfss   FSR,SNSBIT      ; Skip if sensor is on due ambient light ...
     goto    DetectEnd       ; ... else train presence is indeternimable
 
@@ -202,8 +200,7 @@ SensorOff
     goto    DetectEnd
 
 EmitterOn
-;    bsf     EMTPORT,EMTBIT  ; Turn emitter off (active low)
-    bcf     EMTPORT,EMTBIT  ; Turn emitter off (active low)
+    bsf     EMTPORT,EMTBIT  ; Turn emitter off (active low)
     btfss   FSR,SNSBIT      ; Skip if sensor is on ...
     goto    SensorOff       ; ... else jump as sensor not detecting
 
