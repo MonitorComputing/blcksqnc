@@ -208,7 +208,7 @@ SensorOn
     ; Possible presence of train
     incfsz  snsAcc,W        ; Increment sensor match accumulator into W
     movwf   snsAcc          ; If result is not zero update the accumulator
-    btfsc   snsAcc,INPACTV  ; Skip if accumulator below high water ...
+    btfsc   snsAcc,DETACTV  ; Skip if accumulator below high water ...
     bcf     DETPORT,DETBIT  ; ... else turn detector indicator on (active low)
 
 DetectEnd
