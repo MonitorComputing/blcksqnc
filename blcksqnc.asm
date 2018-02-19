@@ -36,7 +36,7 @@
 ;**********************************************************************
 ;                                                                     *
 ;                            +---+ +---+                              *
-;       Clear2 Aspect  <- RA2|1  |_| 18|RA1 -> Clear1 Aspect          *
+;    Warning 2 Aspect  <- RA2|1  |_| 18|RA1 -> Warning 1 Aspect       *
 ;        Clear Aspect  <- RA3|2      17|RA0 -> Stop Aspect            *
 ;          !Detecting <-> RA4|3      16|                              *
 ;                            |4      15|                              *
@@ -44,7 +44,7 @@
 ;     !Latch Signal On -> RB0|6      13|RB7 <-> Next / <- !Inhibit    *
 ;       !Line reversed -> RB1|7      12|RB6 <-> Previous              *
 ;   Line bidirectional -> RB2|8      11|RB5 ->  !Emitter              *
-;       !Special speed -> RB3|9      10|RB4 <-  Sensor                *
+;         Normal speed -> RB3|9      10|RB4 <-  Sensor                *
 ;                            +---------+                              *
 ;                                                                     *
 ;**********************************************************************
@@ -57,9 +57,10 @@
  
 ; Aspect output constants
 STPMSK      EQU     B'00000001' ; Mask for stop aspect output bit
-CL1MSK      EQU     B'00000010' ; Mask for clear1 aspect output bit
-CL2MSK      EQU     B'00000100' ; Mask for clear2 aspect output bit
+WR1MSK      EQU     B'00000010' ; Mask for warning 1 aspect output bit
+WR2MSK      EQU     B'00000100' ; Mask for warning 2 aspect output bit
 CLRMSK      EQU     B'00001000' ; Mask for clear aspect output bit
+BLANKMSK    EQU     B'00000000' ; Mask for blank aspect output
 
  
 ;**********************************************************************
@@ -101,10 +102,18 @@ GetAspectOutput
     btfsc   STATUS,Z
     retlw   CLRMSK
 
-    btfss   aspVal,ASPCLFLG
-    retlw   CL1MSK
-    retlw   CL2MSK
-    return
+    movlw   HALFSEC
+    andwf   secCount,W      ; Test for flashing aspect blanking period
+    
+    movlw   WR2MSK
+    btfss   aspVal,ASPW2FLG
+    movlw   WR1MSK
+    btfsc   nxtCntlr,SPDFLG ; Skip if next signal not at normal speed ...
+    return                  ; ... else display warning aspect
+    btfss   STATUS,Z        ; Skip if aspect blanking period ...
+    return                  ; ... else display warning aspect
+    retlw   BLANKMSK        ; Blank aspect display
+
 
 ;**********************************************************************
 ; End of source code
