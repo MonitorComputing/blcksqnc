@@ -41,7 +41,7 @@
 ;  - Power up timer enabled
 ;  - Crystal (resonator) oscillator
 
-    __config   _CP_OFF & _WDT_OFF & _PWRTE_ON & _XT_OSC
+    __config   _CP_OFF & _PWRTE_ON & _XT_OSC
 
 ; '__config' directive is used to embed configuration data within .asm file.
 ; The lables following the directive are located in the respective .inc file.
@@ -187,7 +187,7 @@ SNSPORT     EQU     PORTB       ; Sensor input port
 SNSBIT      EQU     4           ; Sensor input bit (active high)
 DETPORT     EQU     PORTA       ; Detection indicator port
 DETBIT      EQU     4           ; Detection indicator bit (active low)
-INPACTV     EQU     7           ; Correspondance accumulator >= high water bit
+DETACTV     EQU     7           ; Correspondance accumulator >= high water bit
 
 ; Local controller status flags
 STRFLG      EQU     3           ; Exit detection stretched bit in status byte
