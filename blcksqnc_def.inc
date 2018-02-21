@@ -17,16 +17,18 @@
 ; Configuration directives
 ;**********************************************************************
 
-    list      r=dec,p=16F84
+    list      r=dec,p=16F627
 
-#include "p16f84.inc"
+#include "p16f627.inc"
 ; Configuration word
 ;  - Code Protection Off
-;  - Watchdog timer enabled
+;  - Data code Protection Off
+;  - MCLR disabled, use RA5 for IO
 ;  - Power up timer enabled
-;  - Crystal (resonator) oscillator
+;  - Watchdog timer disabled
+;  - Internal oscillator, use RA6 and 7 for IO
 
-    __config   _CP_OFF & _PWRTE_ON & _XT_OSC
+    __config   _CP_OFF & _CPD_OFF & _LVP_OFF & _MCLRE_OFF & _PWRTE_ON & _WDT_OFF & _INTRC_OSC_NOCLKOUT
 
 ; '__config' directive is used to embed configuration data within .asm file.
 ; The lables following the directive are located in the respective .inc file.
@@ -63,11 +65,13 @@ BootVector  EQU     0x000
 CodeEnd     EQU     0x33F
 EEpromStart EQU     0x2100
 IntVector   EQU     0x004
-RAM_Start   EQU     0x0C
-RAM_End     EQU     0x4F
+RAM0_Start  EQU     0x20
+RAM0_End    EQU     0x7F
+RAM1_Start  EQU     0xA0
+RAM1_End    EQU     0xEF
 
 ; I/O port direction masks
-PORTASTATUS EQU     B'00000000' ; Configure all as outputs (RB4 open collector)
+PORTASTATUS EQU     B'00000000' ; Configure all as outputs (RB4 open drain)
 PORTBSTATUS EQU     B'00011111' ; RB0 - RB4 inputs, all others outputs
 
 ; Interrupt & timing constants
@@ -173,6 +177,9 @@ SNSBIT      EQU     4           ; Sensor input bit (active high)
 DETPORT     EQU     PORTA       ; Detection indicator port
 DETBIT      EQU     4           ; Detection indicator bit (active low)
 DETACTV     EQU     7           ; Correspondance accumulator >= high water bit
+
+OCCPORT     EQU     PORTA       ; Occupation indicator port
+OCCBIT      EQU     6           ; Occupation indicator bit (active low)
 
 ; Local controller status flags
 STRFLG      EQU     3           ; Exit detection stretched bit in status byte

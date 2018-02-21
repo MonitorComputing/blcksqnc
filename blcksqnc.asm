@@ -21,8 +21,8 @@
 ;                            +---+ +---+                              *
 ;    Warning 2 Aspect  <- RA2|1  |_| 18|RA1 -> Warning 1 Aspect       *
 ;        Clear Aspect  <- RA3|2      17|RA0 -> Stop Aspect            *
-;          !Detecting <-> RA4|3      16|                              *
-;                            |4      15|                              *
+;          !Detecting <-> RA4|3      16|RA7                           *
+;                         RA5|4      15|RA6 -> Block occupied         *
 ;                            |5      14|                              *
 ;     !Latch Signal On -> RB0|6      13|RB7 <-> Next / <- !Inhibit    *
 ;       !Line reversed -> RB1|7      12|RB6 <-> Previous              *
@@ -53,8 +53,8 @@ BLANKMSK    EQU     B'00000000' ; Mask for blank aspect output
 afterRAM
             endc
 endRAM      EQU afterRAM - 1
-#if RAM_End < endRAM
-    error "This program ran out of RAM!"
+#if RAM0_End < endRAM
+    error "This program ran out of Bank 0 RAM!"
 #endif
 
 ;**********************************************************************
