@@ -17,7 +17,7 @@
 ; Variable registers
 ;**********************************************************************
 
-            cblock  RAM_Start
+            cblock  RAM0_Start
 
 ; Status and accumulator storage during interrupt
 w_isr           ; 'w' register, accumulator, store during ISR

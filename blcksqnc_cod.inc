@@ -206,6 +206,12 @@ DetectEnd
     iorlw   ~ASPOUTMSK      ; Protect non aspect output bits
     andwf   ASPPORT,F       ; Clear relevant aspect output bits
 
+    movlw   BLKSTATE
+    andwf   lclCntlr,W      ; Test block state of local block
+    bsf     OCCPORT,OCCBIT  ; Turn off occupied indicator (active low)
+    btfss   STATUS,Z        ; Skip if local block clear ...
+    bcf     OCCPORT,OCCBIT  ; ... else turn off occupied indicator (active low)
+
     ; End Interrupt Service Routine
     ;******************************************************************
 
@@ -229,24 +235,18 @@ ExitISR
 
 
 ;**********************************************************************
-; Subroutine to read EEPROM
-;**********************************************************************
-
-ReadEEPROM
-    movwf   EEADR           ; Set address of EEPROM location to read
-    BANKSEL EECON1
-    bsf     EECON1,RD       ; Trigger EEPROM read
-    BANKSEL EEDATA
-    movf    EEDATA,W        ; Get EEPROM data read
-    BANKSEL TMR0
-    return
-
-
-;**********************************************************************
 ; Main program initialisation code
 ;**********************************************************************
 
 Initialise
+
+    ; Disable comparators in order to use port A for I/O
+    ;******************************************************************
+
+    bsf     CMCON,CM0
+    bsf     CMCON,CM1
+    bsf     CMCON,CM2
+
     ; Clear I/O ports
     ;******************************************************************
 
@@ -255,13 +255,10 @@ Initialise
 
     BANKSEL OPTION_REG
 
-    ; Program I/O port bit directions
+    ; Ensure internal oscillator set 4MHz
     ;******************************************************************
 
-    movlw   PORTASTATUS
-    movwf   TRISA
-    movlw   PORTBSTATUS
-    movwf   TRISB
+    bsf     PCON,OSCF
 
     ; Set option register:
     ;******************************************************************
@@ -269,6 +266,14 @@ Initialise
 
     clrf    OPTION_REG
     bsf     OPTION_REG,PSA
+
+    ; Program I/O port bit directions
+    ;******************************************************************
+
+    movlw   PORTASTATUS
+    movwf   TRISA
+    movlw   PORTBSTATUS
+    movwf   TRISB
 
     BANKSEL TMR0
 
@@ -285,13 +290,13 @@ Initialise
     ;******************************************************************
 
     movlw   endRAM          ; Address of end of RAM
-    movwf   RAM_Start       ; Ensure first byte of RAM is non zero
+    movwf   RAM0_Start      ; Ensure first byte of RAM is non zero
     movwf   FSR             ; Point indirect register to end of RAM
 
 ClearRAM
     clrf    INDF            ; Clear byte of RAM addressed by FSR
     decf    FSR,F           ; Decrement FSR to next byte of RAM
-    movf    RAM_Start,F     ; Test first byte of RAM
+    movf    RAM0_Start,F    ; Test first byte of RAM
     btfss   STATUS,Z        ; Skip if byte of RAM now zero ...
     goto    ClearRAM        ; ... else continue to clear RAM
 
@@ -919,6 +924,20 @@ PrevLinkEnd
     ; End of main processing loop
     ;******************************************************************
     goto    Main
+
+
+;**********************************************************************
+; Subroutine to read EEPROM
+;**********************************************************************
+
+ReadEEPROM
+    movwf   EEADR           ; Set address of EEPROM location to read
+    BANKSEL EECON1
+    bsf     EECON1,RD       ; Trigger EEPROM read
+    BANKSEL EEDATA
+    movf    EEDATA,W        ; Get EEPROM data read
+    BANKSEL TMR0
+    return
 
 
 ;**********************************************************************
