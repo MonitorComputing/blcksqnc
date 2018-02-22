@@ -125,3 +125,9 @@ lclCntlr        ; Status of this controller:
                 ;   bit 5 - Entry detection (Exit detection from previous)
                 ;   bit 6 - Local block reversed
                 ;   bit 7 - Unused
+
+seenRvsl        ; Line and block reversal seen for next and previous controllers
+                ;   bits 0 - 2 - Unused
+                ;   bit 5      - Next line reversed
+                ;   bit 6      - Previous block reversed
+                ;   bit 7      - Unused
