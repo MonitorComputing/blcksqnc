@@ -825,18 +825,21 @@ BlockClear      ; **** State 0 - Block clear ****
 
 CheckNtrRev
     ; Check for train entering in reverse
-    movlw   TRAINENTERINGR  ; Possible next state
+    movlw   TRAINENTERINGR  ; Possible next state if train at block exit
     btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
     goto    NewBlkState     ; ... else train entering in reverse, change state
 
 CheckNtrFwd
     ; Check for train entering forwards
-    btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
+    movlw   TRAINENTERINGF  ; Possible next state if train at block entrance
+    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
+    goto    NewBlkState     ; ... else train entering forward, change state
+
+    btfsc   inputs,TOTBIT   ; Skip if train on track on (active low) ...
     return                  ; ... else remain in current state
 
-    ; Train at block entrance,
-    ; next state = 1 - Train entering forward,
-    incf    lclCntlr,F      ; Roll through to next state
+    movlw   BLOCKOCCUPIED   ; Force change block occupied state
+    goto    NewBlkState
 
 
 TrainEnteringF  ; **** State 1 - Train entering forward ****
