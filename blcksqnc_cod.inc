@@ -131,7 +131,7 @@ BeginISR
     movlw   high BeginISR   ; Load ISR address high byte ...
     movwf   PCLATH          ; ... into PCLATH to set code block
 
-RunISR
+RunTMR0
     ; Re-enable the timer interrupt and reload the timer
     bcf     INTCON,T0IF     ; Reset the TMR0 Interrupt bit
     movlw   RTCCINT + 3     ; Add 3 cycles for TMR0 write increment and inhibit
@@ -158,7 +158,7 @@ RunISR
 
     ; Detector is designed to float at 2.5V, just above TTL off threshold and
     ; filtered to ignore low frequency signals in order to reject ambient light
-    ; sources. Hence 
+    ; sources. Hence
     ; If emmitter is on detector on could mean train present or inteference
     ; from ambient light whereas detector off means no train present.
     ; If emitter is off detector on means interence from ambient light whereas
@@ -210,13 +210,13 @@ DetectEnd
     andwf   lclCntlr,W      ; Test block state of local block
     bsf     OCCPORT,OCCBIT  ; Turn off occupied indicator (active low)
     btfss   STATUS,Z        ; Skip if local block clear ...
-    bcf     OCCPORT,OCCBIT  ; ... else turn off occupied indicator (active low)
+    bcf     OCCPORT,OCCBIT  ; ... else turn on occupied indicator (active low)
 
     ; End Interrupt Service Routine
     ;******************************************************************
 
     btfsc   INTCON,T0IF     ; Skip if no TMR0 overflow during ISR ...
-    goto    RunISR          ; ... else run service routine again
+    goto    RunTMR0         ; ... else run service routine again
 
     ; Exit Interrupt Service Routine
     ;******************************************************************
@@ -240,32 +240,22 @@ ExitISR
 
 Initialise
 
-    ; Disable comparators in order to use port A for I/O
+    ; Initialise ports
     ;******************************************************************
 
-    bsf     CMCON,CM0
-    bsf     CMCON,CM1
-    bsf     CMCON,CM2
-
-    ; Clear I/O ports
-    ;******************************************************************
+    movlw   (1 << CM2) | (1 << CM1) | (1 << CM0)
+    movwf   CMCON           ; Using port A for I/O so disable comparators
 
     clrf    PORTA
     clrf    PORTB
 
+    movlw   PORTASTATUS     ; For Port A need to write one to each bit ...
+    movwf   PORTA           ; ... being used for input
+
+    bsf     EMTPORT,EMTBIT  ; Ensure detector emmitter is off (active low)
+    bsf     DETPORT,DETBIT  ; Ensure detector indicator is off (active low)
+
     BANKSEL OPTION_REG
-
-    ; Ensure internal oscillator set 4MHz
-    ;******************************************************************
-
-    bsf     PCON,OSCF
-
-    ; Set option register:
-    ;******************************************************************
-    ;   Prescaler assignment - watchdog timer
-
-    clrf    OPTION_REG
-    bsf     OPTION_REG,PSA
 
     ; Program I/O port bit directions
     ;******************************************************************
@@ -275,16 +265,19 @@ Initialise
     movlw   PORTBSTATUS
     movwf   TRISB
 
-    BANKSEL TMR0
-
-    ; Initialise ports
+    ; Ensure internal oscillator set 4MHz
     ;******************************************************************
 
-    movlw   PORTASTATUS     ; For Port A need to write one to each bit ...
-    movwf   PORTA           ; ... being used for input
+    bsf     PCON,OSCF
 
-    bsf     EMTPORT,EMTBIT  ; Ensure detector emmitter is off (active low)
-    bsf     DETPORT,DETBIT  ; Ensure detector indicator is off (active low)
+    ; Set option register:
+    ;******************************************************************
+    ;   Prescaler assignment - watchdog timer, maximum prescaling
+
+    movlw   (1 << PSA) | (1 << PS2) | (1 << PS1) | (1 << PS0)
+    movwf   OPTION_REG
+
+    BANKSEL TMR0
 
     ; Initialise RAM to zero
     ;******************************************************************
@@ -302,11 +295,18 @@ ClearRAM
 
     incf    snsAcc,F        ; Prevent accumulator rollover down through zero
 
-    ; Inputs are active low so initialise debounce for all off
+    ; Most inputs are active low so initialise debounce for all off
     comf    debnce,F
     comf    inputs,F
 
-    bsf     lnkPState,LNKDIRFLG ; Initially send to previous controller
+    ; Initialise controller links
+    ;******************************************************************
+
+    MaxLw   INTLINKTMON, 1
+    movwf   lnkNTimer       ; Initialise next link reception timeout
+
+    bsf     lnkPState,LNKDIRFLG ; Initially send to previous link
+    bsf     lnkPState,NOPFLG    ; Presume not received from previous link
 
     ; Initialise timing
     ;******************************************************************
@@ -413,8 +413,8 @@ Timing
     ; is only done once a second so detection can be stretched to
     ; ignore any gaps between vehicles.
     ;******************************************************************
-
-    btfss   inputs,DETBIT   ; Skip if detection input is off (active low) ...
+ 
+   btfss   inputs,DETBIT   ; Skip if detection input is off (active low) ...
     goto    TimingEnd       ; ... else skip stretching of exit detection
 
     btfsc   lclCntlr,STRFLG ; Skip if exit detection has not been stretched ...
@@ -425,7 +425,6 @@ Timing
 TimingEnd
 
 
-    ;******************************************************************
     ; Check status of train detection input (active low) for on
     ;******************************************************************
 
@@ -435,186 +434,82 @@ TimingEnd
     bcf     lclCntlr,STRFLG ; ... else clear exit detection stretched flag
 
 
-    ;******************************************************************
-    ; Run local occupation block state machine
-    ;******************************************************************
-
-    btfsc   lnkPState,NOPFLG ; Skip if receiving data from previous link ...
-    goto    BlockEnd         ; ... else don't run block logic
-
-    movlw   high BlockTable ; Load jump table address high byte ...
-    movwf   PCLATH          ; ... into PCLATH to make jump in same code block
-    movf    lclCntlr,W      ; Use current state value ...
-
-BlockStateJump
-    andlw   BLKSTATE        ; ... (after removing flag and aspect bits) ...
-    addwf   PCL,F           ; ... as offset into state jump table
-
-BlockTable
-    goto    BlockClear      ; State 0 - Block clear
-    goto    TrainEnteringF  ; State 1 - Train entering forward
-    goto    TrainInBlock    ; State 2 - Train in block
-    goto    TrainLeavingF   ; State 3 - Train leaving forward
-    goto    TrainSpansBlock ; State 4 - Train spanning block
-    goto    TrainEnteringR  ; State 5 - Train entering reverse
-    goto    TrainLeavingR   ; State 6 - Train leaving reverse
-    goto    BlockEnd        ; State 7 - Unused
-
-#if (high BlockTable) != (high $)
-    error "Block state jump table spans 8 bit boundary"
-#endif
-
-NewBlkState
-    iorwf   lclCntlr,F      ; Set at least the desired state
-    iorlw   ~BLKSTATE       ; Protect non state bits
-    andwf   lclCntlr,F      ; Narrow to the desired state
-    goto    BlockStateJump  ; Go directly to the new state
-
-
-BlockClear      ; **** State 0 - Block clear ****
-
-CheckNtrRev
-    ; Check for train entering in reverse
-    movlw   TRAINENTERINGR  ; Possible next state
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    NewBlkState     ; ... else train entering in reverse, change state
-
-CheckNtrFwd
-    ; Check for train entering forwards
-    btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
-    goto    BlockEnd        ; ... else remain in current state
-
-    ; Train at block entrance,
-    ; next state = 1 - Train entering forward,
-    incf    lclCntlr,F      ; Roll through to next state
-
-
-TrainEnteringF  ; **** State 1 - Train entering forward ****
-
-    bcf     lclCntlr,BRVFLG ; Clear local block reversed
-
-ChkSpnFwd
-    ; Check if train now spans this block
-    movlw   BLOCKSPANNED    ; Possible next state
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    NewBlkState     ; ... else train now spans this block, change state
-
-CheckOccFwd
-    ; Check if train now occupies this block
-    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
-    goto    BlockEnd        ; ... else remain in current state
-
-    ; Train no longer at block entrance,
-    ; next state = 2 - Train in block
-    incf    lclCntlr,F      ; Roll through to next state
-
-
-TrainInBlock   ; **** State 2 - Train in block ****
-
-CheckExtRev
-    ; Check for train exiting in reverse
-    movlw   TRAINLEAVINGR   ; Possible next state
-    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
-    goto    NewBlkState     ; ... else train exiting in reverse, change state
-
-CheckExtFwd
-    btfss   lclCntlr,EXTFLG ; Skip if exit detection on ...
-    goto    BlockEnd        ; ... else remain in current state
-
-    ; Train detected at block exit,
-    ; next state = 3 - Train leaving forward
-    incf    lclCntlr,F      ; Roll through to next state
-
-
-TrainLeavingF   ; **** State 3 - Train leaving forward ****
-
-    bcf     lclCntlr,BRVFLG ; Clear local block reversed
-
-    ; Check if train has left block
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    ChkTrnRvd       ; ... else check if train now spans this block
-
-    ; Train no longer at block exit,
-    ; next state = 0 - Block clear
-    movlw   BLOCKCLEAR      ; Next state
-    goto    NewBlkState     ; Change state
-
-ChkTrnRvd
-    ; Check if train has changed direction and now spans this block
-    btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
-    goto    BlockEnd    ; ... else remain in current state
-
-    bsf     lclCntlr,BRVFLG ; Set local block reversed
-
-    ; Train detected at block entrance,
-    ; next state = 4 - Train spanning block
-    incf    lclCntlr,F      ; Roll through to next state
-
-
-TrainSpansBlock    ; **** State 4 - Train spanning block ****
-
-CheckTrvFwd
-    ; Check for train traversal of block forwards
-    movlw   TRAINLEAVINGF   ; Possible next state
-    btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
-    goto    NewBlkState     ; ... else train is leaving forwards, change state
-
-CheckTrvRev
-    ; Check for train traversal of block in reverse
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    BlockEnd    ; ... else remain in current state
-
-    ; Train no longer at block exit,
-    ; next state = 6 - Train leaving reverse
-    movlw   TRAINLEAVINGR   ; Next state
-    goto    NewBlkState
-
-
-TrainEnteringR  ; **** State 5 - Train entering reverse ****
-
-    bsf     lclCntlr,BRVFLG ; Set local block reversed
-
-ChkSpnRev
-    ; Check if train now spans this block
-    movlw   BLOCKSPANNED    ; Possible next state
-    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
-    goto    NewBlkState     ; ... else train at block entrance, change state
-
-CheckOccRev
-    ; Check if train now occupies this block
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    BlockEnd    ; ... else remain in current state
-
-    ; Train no longer at block exit,
-    ; next state = 2 - Train in block
-    movlw   BLOCKOCCUPIED   ; Next state
-    goto    NewBlkState
-
-
-TrainLeavingR   ; **** State 6 - Train leaving reverse ****
-
-    bsf     lclCntlr,BRVFLG ; Set local block reversed
-
-    ; Check if train has changed direction and now spans this block
-    movlw   BLOCKSPANNED    ; Possible next state
-    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
-    goto    NewBlkState     ; ... else train at block exit, change state
-
-    ; Check if train has left block
-    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
-    goto    BlockEnd        ; ... else remain in current state
-
-    ; Train no longer at block entrance,
-    ; next state = 0 - Block clear
-    movlw   BLOCKCLEAR      ; Next state
-    goto    NewBlkState     ; Change State
-
-BlockEnd    ; End of signal block state machine
-
-
-    ;******************************************************************
     ; Service link with next controller
     ;******************************************************************
+    call    ServiceNextLink
+
+    ; Set local signal aspect display output value
+    ;******************************************************************
+    call    SetAspectOutput
+
+    ; Run local block occupation state machine
+    ;******************************************************************
+    call    RunBlockLogic
+
+
+    ; Line reversal can be from input or local block reversal logic
+    ;******************************************************************
+
+    btfsc   lclCntlr,BRVFLG ; Skip if local block not reversed ...
+    bcf     inputs,REVBIT   ; ... else set line reversed (active low)
+
+    btfss   inputs,BIDBIT   ; Skip if line bidirectional ...
+    bsf     inputs,REVBIT   ; ... else line reversal not alllowed (active low)
+
+
+    ; Service link with previous controller
+    ;******************************************************************
+    call    ServicePrevLink
+
+
+    ;******************************************************************
+    ; Optional main loop code (user code should define UserMain macro)
+    ;******************************************************************
+#ifdef UserMain
+    UserMain
+#endif
+
+
+    ;******************************************************************
+    ; End of main processing loop
+    ;******************************************************************
+    goto    Main
+
+
+;**********************************************************************
+; Subroutine to set local signal aspect display output value
+;**********************************************************************
+SetAspectOutput
+
+    ; Unless the local signal is latched or inhibited this controller displays
+    ; the received, or simulated, signal aspect for the next block
+
+    movlw   ASPMSK
+    andwf   aspVal,W        ; Test local signal aspect value
+    btfss   STATUS,Z        ; Skip if local signal aspect value = stop ...
+    goto    SetLocalAspect  ; ... otherwise set local aspect
+
+    btfss   inputs,LCHBIT   ; Skip if latch input is off (active low) ...
+    return                  ; ... otherwise leave local aspect = stop
+
+SetLocalAspect
+    movlw   ASPMSK
+    andwf   nxtCntlr,W      ; Get local signal aspect from next controller
+    btfss   inputs,INHBIT   ; Skip if signal is not inhibited (active low) ...
+    clrw                    ; ... otherwise set aspect = stop
+
+#ifdef UserAspect
+    UserAspect
+#endif
+
+    movwf   aspVal          ; Save aspect display value
+    return
+
+
+;**********************************************************************
+; Subroutine to service link with next controller
+;**********************************************************************
+ServiceNextLink
 
     btfss   lnkNState,LNKDIRFLG ; Skip if replying to next controller ...
     goto    CheckNextRx         ; ... else skip over next controller send
@@ -652,7 +547,7 @@ BlockEnd    ; End of signal block state machine
     MaxLw   INTLINKTMON, 1
     movwf   lnkNTimer       ; Start reception timeout
 
-    goto    NextLinkEnd
+    return
 
 CheckNextRx
     ; Look for status received from next controller
@@ -671,7 +566,7 @@ CheckNextRx
     comf    FSR,F           ; Complement - high nibble, status bits - low nibble
     xorwf   FSR,F           ; Exclusive or received data with complement
     btfss   STATUS,Z        ; Skip if result is zero, i.e. data is ok ...
-    goto    NextLinkEnd     ; ... else ignore received data
+    return                  ; ... else ignore received data
 
     ; As a simple error check received data is ignored unless same value
     ; received twice in succession
@@ -679,7 +574,7 @@ CheckNextRx
     xorwf   telemNxt,F      ; Test against last received data
     movwf   telemNxt        ; Replace last received data
     btfss   STATUS,Z        ; Skip if last and just received data match ...
-    goto    NextLinkEnd     ; ... else ignore just received data
+    return                  ; ... else ignore just received data
 
 #ifdef UserNextRx
     UserNextRx
@@ -689,24 +584,26 @@ CheckNextRx
 
     bsf     lnkNState,LNKDIRFLG ; Start replying to next controller
 
-    ; Action line reversal state propogated from next controller
-    ;   If next controller line reversed then reverse local block
-    ;   If next controller line normal and local block clear then
-    ;   unreverse local block
-    ;******************************************************************
+    ; If next line reversal has changed and block clear set block reversal
 
-    btfsc   nxtCntlr,LRVFLG ; Skip if next controller line not reversed ...
-    bsf     lclCntlr,BRVFLG ; ... else set local block reversed
-
-    btfsc   nxtCntlr,LRVFLG ; Skip if next controller line not reversed ...
-    goto    NextLinkEnd     ; ... else leave local block reversed
+    xorwf   seenRvsl,W      ; Test for change of next line reversal
+    andlw   LRVMSK
+    btfsc   STATUS,Z        ; Skip if next line reversal has changed ...
+    return                  ; ... else ignore next line reversal state
 
     movlw   BLKSTATE
-    andwf   lclCntlr,W      ; Test block state of local block
-    btfsc   STATUS,Z        ; Skip if local block not clear ...
-    bcf     lclCntlr,BRVFLG ; ... else clear local block reversed
+    andwf   lclCntlr,W      ; Test occupation state of local block
+    btfss   STATUS,Z        ; Skip if local block clear ...
+    return                  ; ... else ignore next line reversal state
 
-    goto    NextLinkEnd
+    bsf     lclCntlr,BRVFLG ; Assume block reversed
+    bsf     seenRvsl,LRVFLG ; Assume next controller line reversed
+    btfsc   nxtCntlr,LRVFLG ; Skip if next controller line is not reversed ...
+    return                  ; ... else leave block and next line reversed
+
+    bcf     lclCntlr,BRVFLG ; Set local block unreversed
+    bcf     seenRvsl,LRVFLG ; Set next controller line unreversed
+    return
 
 NextRxSkip
 
@@ -721,7 +618,7 @@ NextRxSkip
     bsf     inputs,INHBIT   ; Set inhibit input off (active low)
     bsf     debnce,INHBIT   ; Set inhibit input debounce off (active low)
 
-    goto    NextLinkEnd     ; ... else keep waiting for data
+    return                  ; ... else keep waiting for data
 
 
 NextLinkFailed
@@ -744,7 +641,7 @@ NextLinkFailed
 
 RunNextSignal
     decfsz  nxtTimer,W      ; Test if aspect timer elapsed ...
-    goto    NextLinkEnd     ; ... else skip next signal sequencing
+    return                  ; ... else skip next signal sequencing
 
     ; Simulate next signal changing aspect
     movlw   ASPINCR
@@ -756,54 +653,13 @@ TimeNextSignal
     ; Load aspect timer for the duration of the new aspect
     movf    aspectTime,W
     movwf   nxtTimer
-
-NextLinkEnd
-
-
-    ;******************************************************************
-    ; Process local signal aspect display
-    ;******************************************************************
-
-    ; Unless the local signal is latched or inhibited this controller displays
-    ; the received, or simulated, signal aspect for the next block
-
-    movlw   ASPMSK
-    andwf   aspVal,W        ; Test local signal aspect value
-    btfss   STATUS,Z        ; Skip if local signal aspect value = stop ...
-    goto    SetLocalAspect  ; ... otherwise set local aspect
-
-    btfss   inputs,LCHBIT   ; Skip if latch input is off (active low) ...
-    goto    SkipLocalAspect ; ... otherwise leave local aspect = stop
-
-SetLocalAspect
-    movlw   ASPMSK
-    andwf   nxtCntlr,W      ; Get local signal aspect from next controller
-    btfss   inputs,INHBIT   ; Skip if signal is not inhibited (active low) ...
-    clrw                    ; ... otherwise set aspect = stop
-
-#ifdef UserAspect
-    UserAspect
-#endif
-
-    movwf   aspVal          ; Save aspect display value
-
-SkipLocalAspect
+    return
 
 
-    ;******************************************************************
-    ; Line reversal can be from input or local block reversal logic
-    ;******************************************************************
-
-    btfsc   lclCntlr,BRVFLG ; Skip if local block not reversed ...
-    bcf     inputs,REVBIT   ; ... else set line reversed (active low)
-
-    btfss   inputs,BIDBIT   ; Skip if line bidirectional ...
-    bsf     inputs,REVBIT   ; ... else clear line reversed (active low)
-
-
-    ;******************************************************************
-    ; Service link with previous controller
-    ;******************************************************************
+;**********************************************************************
+; Subroutine to service link with previous controller
+;**********************************************************************
+ServicePrevLink
 
     btfss   lnkPState,LNKDIRFLG ; Skip if not waiting on reply from previous
     goto    CheckPrevRx         ; ... else skip over previous controller send
@@ -851,7 +707,7 @@ SendAspects
 
     call    LinkTxP         ; Send data to previous block
     btfss   STATUS,Z        ; Skip if data was sent ...
-    goto    PrevLinkEnd     ; ... else continue trying to send
+    return                  ; ... else continue trying to send
 
     bcf     lnkPState,LNKDIRFLG ; Start waiting on reply from previous
 
@@ -870,7 +726,7 @@ CheckPrevRx
 
     call    LinkRxP         ; Check for data from previous controller
     btfss   STATUS,Z        ; Skip if data received ...
-    goto    PrevLinkEnd     ; ... else continue waiting for reply
+    return                  ; ... else continue waiting for reply
 
     ; Only three bits of status (entry detection, approach detection, and block
     ; reversed) are received so as a simple error check these are sent in low
@@ -881,7 +737,7 @@ CheckPrevRx
     comf    FSR,F           ; Complement - high nibble, status bits - low nibble
     xorwf   FSR,F           ; Exclusive or received data with complement
     btfss   STATUS,Z        ; Skip if result is zero, i.e. data is ok ...
-    goto    PrevLinkEnd      ; ... else ignore just received data
+    return                    ; ... else ignore just received data
 
     ; As a simple error check received data is ignored unless same value
     ; received twice in succession
@@ -889,7 +745,7 @@ CheckPrevRx
     xorwf   telemPrv,F      ; Test against last received data
     movwf   telemPrv        ; Replace last received data
     btfss   STATUS,Z        ; Skip if last and just received data match ...
-    goto    PrevLinkEnd     ; ... else ignore just received data
+    return                  ; ... else ignore just received data
 
     bcf     lnkPState,NOPFLG ; Clear no reception from previous link flag
 
@@ -897,33 +753,211 @@ CheckPrevRx
     UserPreviousRx
 #endif
 
+    movwf   FSR             ; Copy the received status for bit tests later
+
     ; Previous exit detection is local entry detection
-    movwf   FSR             ; Copy the received status for bit tests
     bcf     lclCntlr,ENTFLG ; Assume entry detector is off
     btfsc   FSR,EXTFLG      ; Skip if previous exit detector is off ...
     bsf     lclCntlr,ENTFLG ; ... else entry detector is on
 
-    btfss   FSR,BRVFLG      ; Skip if previous block reversed ...
-    bcf     lclCntlr,BRVFLG ; ... else clear local block reversed
+    ; If previous block reversal has changed and block clear copy block reversal
+
+    xorwf   seenRvsl,W      ; Test for change of next line reversal
+    andlw   BRVMSK
+    btfsc   STATUS,Z        ; Skip if previous block reversal has changed ...
+    goto    PrevRxDone      ; ... else ignore previous block reversal state
+
+    movlw   BLKSTATE
+    andwf   lclCntlr,W      ; Test occupation state of local block
+    btfss   STATUS,Z        ; Skip if local block clear ...
+    goto    PrevRxDone      ; ... else ignore previous block reversal state
+
+    bsf     seenRvsl,BRVFLG ; Assume previous block reversed
+    btfsc   FSR,BRVFLG      ; Skip if previous block clear ...
+    goto    PrevRxDone      ; ... else ignore previous block reversal state
+
+    bcf     lclCntlr,BRVFLG ; Clear local block unreversed
+    bcf     seenRvsl,BRVFLG ; Clear previous block unreversed
 
 PrevRxDone
     bsf     lnkPState,LNKDIRFLG ; Resume sending to previous controller
+    return
 
-PrevLinkEnd
 
+;**********************************************************************
+; Subroutine to run local occupation block state machine
+;**********************************************************************
+RunBlockLogic
 
-    ;******************************************************************
-    ; Optional main loop code (user code should define UserMain macro)
-    ;******************************************************************
-#ifdef UserMain
-    UserMain
+    btfsc   lnkPState,NOPFLG ; Skip if receiving data from previous link ...
+    return                   ; ... else don't run block logic
+
+    movlw   high BlockTable ; Load jump table address high byte ...
+    movwf   PCLATH          ; ... into PCLATH to make jump in same code block
+    movf    lclCntlr,W      ; Use current state value ...
+
+BlockStateJump
+    andlw   BLKSTATE        ; ... (after removing flag and aspect bits) ...
+    addwf   PCL,F           ; ... as offset into state jump table
+
+BlockTable
+    goto    BlockClear      ; State 0 - Block clear
+    goto    TrainEnteringF  ; State 1 - Train entering forward
+    goto    TrainInBlock    ; State 2 - Train in block
+    goto    TrainLeavingF   ; State 3 - Train leaving forward
+    goto    TrainSpansBlock ; State 4 - Train spanning block
+    goto    TrainEnteringR  ; State 5 - Train entering reverse
+    goto    TrainLeavingR   ; State 6 - Train leaving reverse
+    return                  ; State 7 - Unused
+
+#if (high BlockTable) != (high $)
+    error "Block state jump table spans 8 bit boundary"
 #endif
 
+NewBlkState
+    iorwf   lclCntlr,F      ; Set at least the desired state
+    iorlw   ~BLKSTATE       ; Protect non state bits
+    andwf   lclCntlr,F      ; Narrow to the desired state
+    goto    BlockStateJump  ; Go directly to the new state
 
-    ;******************************************************************
-    ; End of main processing loop
-    ;******************************************************************
-    goto    Main
+
+BlockClear      ; **** State 0 - Block clear ****
+
+CheckNtrRev
+    ; Check for train entering in reverse
+    movlw   TRAINENTERINGR  ; Possible next state
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    goto    NewBlkState     ; ... else train entering in reverse, change state
+
+CheckNtrFwd
+    ; Check for train entering forwards
+    btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
+    return                  ; ... else remain in current state
+
+    ; Train at block entrance,
+    ; next state = 1 - Train entering forward,
+    incf    lclCntlr,F      ; Roll through to next state
+
+
+TrainEnteringF  ; **** State 1 - Train entering forward ****
+
+    bcf     lclCntlr,BRVFLG ; Clear local block reversed
+
+ChkSpnFwd
+    ; Check if train now spans this block
+    movlw   BLOCKSPANNED    ; Possible next state
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    goto    NewBlkState     ; ... else train now spans this block, change state
+
+CheckOccFwd
+    ; Check if train now occupies this block
+    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
+    return                  ; ... else remain in current state
+
+    ; Train no longer at block entrance,
+    ; next state = 2 - Train in block
+    incf    lclCntlr,F      ; Roll through to next state
+
+
+TrainInBlock   ; **** State 2 - Train in block ****
+
+CheckExtRev
+    ; Check for train exiting in reverse
+    movlw   TRAINLEAVINGR   ; Possible next state
+    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
+    goto    NewBlkState     ; ... else train exiting in reverse, change state
+
+CheckExtFwd
+    btfss   lclCntlr,EXTFLG ; Skip if exit detection on ...
+    return                  ; ... else remain in current state
+
+    ; Train detected at block exit,
+    ; next state = 3 - Train leaving forward
+    incf    lclCntlr,F      ; Roll through to next state
+
+
+TrainLeavingF   ; **** State 3 - Train leaving forward ****
+
+    bcf     lclCntlr,BRVFLG ; Clear local block reversed
+
+    ; Check if train has left block
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    goto    ChkTrnRvd       ; ... else check if train now spans this block
+
+    ; Train no longer at block exit,
+    ; next state = 0 - Block clear
+    movlw   BLOCKCLEAR      ; Next state
+    goto    NewBlkState     ; Change state
+
+ChkTrnRvd
+    ; Check if train has changed direction and now spans this block
+    btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
+    return              ; ... else remain in current state
+
+    bsf     lclCntlr,BRVFLG ; Set local block reversed
+
+    ; Train detected at block entrance,
+    ; next state = 4 - Train spanning block
+    incf    lclCntlr,F      ; Roll through to next state
+
+
+TrainSpansBlock    ; **** State 4 - Train spanning block ****
+
+CheckTrvFwd
+    ; Check for train traversal of block forwards
+    movlw   TRAINLEAVINGF   ; Possible next state
+    btfss   lclCntlr,ENTFLG ; Skip if entry detection on ...
+    goto    NewBlkState     ; ... else train is leaving forwards, change state
+
+CheckTrvRev
+    ; Check for train traversal of block in reverse
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    return              ; ... else remain in current state
+
+    ; Train no longer at block exit,
+    ; next state = 6 - Train leaving reverse
+    movlw   TRAINLEAVINGR   ; Next state
+    goto    NewBlkState
+
+
+TrainEnteringR  ; **** State 5 - Train entering reverse ****
+
+    bsf     lclCntlr,BRVFLG ; Set local block reversed
+
+ChkSpnRev
+    ; Check if train now spans this block
+    movlw   BLOCKSPANNED    ; Possible next state
+    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
+    goto    NewBlkState     ; ... else train at block entrance, change state
+
+CheckOccRev
+    ; Check if train now occupies this block
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    return              ; ... else remain in current state
+
+    ; Train no longer at block exit,
+    ; next state = 2 - Train in block
+    movlw   BLOCKOCCUPIED   ; Next state
+    goto    NewBlkState
+
+
+TrainLeavingR   ; **** State 6 - Train leaving reverse ****
+
+    bsf     lclCntlr,BRVFLG ; Set local block reversed
+
+    ; Check if train has changed direction and now spans this block
+    movlw   BLOCKSPANNED    ; Possible next state
+    btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
+    goto    NewBlkState     ; ... else train at block exit, change state
+
+    ; Check if train has left block
+    btfsc   lclCntlr,ENTFLG ; Skip if entry detection off ...
+    return                  ; ... else remain in current state
+
+    ; Train no longer at block entrance,
+    ; next state = 0 - Block clear
+    movlw   BLOCKCLEAR      ; Next state
+    goto    NewBlkState     ; Change State
 
 
 ;**********************************************************************

@@ -28,7 +28,7 @@
 ;  - Watchdog timer disabled
 ;  - Internal oscillator, use RA6 and 7 for IO
 
-    __config   _CP_OFF & _CPD_OFF & _LVP_OFF & _MCLRE_OFF & _PWRTE_ON & _WDT_OFF & _INTRC_OSC_NOCLKOUT
+    __config   _CP_OFF & _CPD_OFF & _LVP_OFF & _MCLRE_OFF & _PWRTE_ON & _WDT_ON & _INTRC_OSC_NOCLKOUT
 
 ; '__config' directive is used to embed configuration data within .asm file.
 ; The lables following the directive are located in the respective .inc file.
@@ -71,7 +71,7 @@ RAM1_Start  EQU     0xA0
 RAM1_End    EQU     0xEF
 
 ; I/O port direction masks
-PORTASTATUS EQU     B'00000000' ; Configure all as outputs (RB4 open drain)
+PORTASTATUS EQU     B'00100000' ; All outputs (RB4 open drain) except RB5
 PORTBSTATUS EQU     B'00011111' ; RB0 - RB4 inputs, all others outputs
 
 ; Interrupt & timing constants
@@ -170,10 +170,10 @@ INHBIT      EQU     7           ; Inhibit, forced stop aspect (active low)
 INPMSK      EQU     B'10001111' ; Mask for input bits
 
 ; Detector I/O constants
-EMTPORT     EQU     PORTB       ; Emitter drive port
-EMTBIT      EQU     5           ; Emmitter drive bit (active low)
-SNSPORT     EQU     PORTB       ; Sensor input port
-SNSBIT      EQU     4           ; Sensor input bit (active high)
+EMTPORT     EQU     PORTA       ; Emitter drive port
+EMTBIT      EQU     7           ; Emmitter drive bit (active low)
+SNSPORT     EQU     PORTA       ; Sensor input port
+SNSBIT      EQU     5           ; Sensor input bit (active high)
 DETPORT     EQU     PORTA       ; Detection indicator port
 DETBIT      EQU     4           ; Detection indicator bit (active low)
 DETACTV     EQU     7           ; Correspondance accumulator >= high water bit
