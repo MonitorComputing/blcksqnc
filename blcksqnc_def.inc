@@ -72,7 +72,7 @@ RAM1_End    EQU     0xEF
 
 ; I/O port direction masks
 PORTASTATUS EQU     B'00100000' ; All outputs (RB4 open drain) except RB5
-PORTBSTATUS EQU     B'00011111' ; RB0 - RB4 inputs, all others outputs
+PORTBSTATUS EQU     B'01111111' ; RB0 - RB5 inputs, RB6 and RB7 outputs
 
 ; Interrupt & timing constants
 RTCCINT     EQU     256 - 200   ; 5KHz = ((4MHz / 4) / 200) (0.2 mSec tick)
@@ -166,8 +166,9 @@ LCHBIT      EQU     0           ; Latch stop aspect (active low)
 REVBIT      EQU     1           ; Line reversed, force stop aspect (active low)
 BIDBIT      EQU     2           ; Running line is bidirectional
 SPDBIT      EQU     3           ; Display normal speed aspects
+TOTBIT      EQU     5           ; Train on track, set block occupied if clear
 INHBIT      EQU     7           ; Inhibit, forced stop aspect (active low)
-INPMSK      EQU     B'10001111' ; Mask for input bits
+INPMSK      EQU     B'10101111' ; Mask for input bits
 
 ; Detector I/O constants
 EMTPORT     EQU     PORTA       ; Emitter drive port

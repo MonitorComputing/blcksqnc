@@ -26,7 +26,7 @@
 ;                            |5      14|                              *
 ;     !Latch Signal On -> RB0|6      13|RB7 <-> Next / <- !Inhibit    *
 ;       !Line reversed -> RB1|7      12|RB6 <-> Previous              *
-;   Line bidirectional -> RB2|8      11|RB5                           *
+;   Line bidirectional -> RB2|8      11|RB5 <- !ToTi (block occupied) *
 ;         Normal speed -> RB3|9      10|RB4                           *
 ;                            +---------+                              *
 ;                                                                     *
