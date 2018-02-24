@@ -91,7 +91,9 @@ inputs          ; Input values after debouncing:
                 ;   bit 2 - Line is bidirectional, else suppress line reversal
                 ;   bit 3 - Local signal to show normal speed aspects
                 ;   bit 4 - Detecting (active low), open drain output (wired or)
-                ;   bit 7 - Inhibit, display stop aspect (active low)
+                ;   bit 5 - Inhibit, display stop aspect (active low)
+                ;   bit 6 - Approach clear (active low)
+                ;   bit 7 - ToTi, block occupied (active low)
 
 snsAcc          ; Detector sensor match (emitter state) accumulator
 
@@ -124,7 +126,7 @@ lclCntlr        ; Status of this controller:
                 ;   bit 4 - Exit detection
                 ;   bit 5 - Entry detection (Exit detection from previous)
                 ;   bit 6 - Local block reversed
-                ;   bit 7 - Unused
+                ;   bit 7 - Train approaching
 
 seenRvsl        ; Line and block reversal seen for next and previous controllers
                 ;   bits 0 - 2 - Unused

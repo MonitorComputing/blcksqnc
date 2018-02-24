@@ -24,10 +24,10 @@
 ;          !Detecting <-> RA4|3      16|RA7 -> !Emitter               *
 ;               Sensor -> RA5|4      15|RA6 -> !Block occupied        *
 ;                            |5      14|                              *
-;     !Latch Signal On -> RB0|6      13|RB7 <-> Next / <- !Inhibit    *
-;       !Line reversed -> RB1|7      12|RB6 <-> Previous              *
-;   Line bidirectional -> RB2|8      11|RB5 <- !ToTi (block occupied) *
-;         Normal speed -> RB3|9      10|RB4                           *
+;     !Latch Signal On -> RB0|6      13|RB7 <- !ToTi (block occupied) *
+;       !Line reversed -> RB1|7      12|RB6 <- !Approach clear        *
+;   Line bidirectional -> RB2|8      11|RB5 <-> Next / <- !Inhibit    *
+;         Normal speed -> RB3|9      10|RB4 <-> Previous              *
 ;                            +---------+                              *
 ;                                                                     *
 ;**********************************************************************

@@ -72,7 +72,7 @@ RAM1_End    EQU     0xEF
 
 ; I/O port direction masks
 PORTASTATUS EQU     B'00100000' ; All outputs (RB4 open drain) except RB5
-PORTBSTATUS EQU     B'01111111' ; RB0 - RB5 inputs, RB6 and RB7 outputs
+PORTBSTATUS EQU     B'11001111' ; 0 - 3, 6, 7 inputs, 4 and 6 outputs
 
 ; Interrupt & timing constants
 RTCCINT     EQU     256 - 200   ; 5KHz = ((4MHz / 4) / 200) (0.2 mSec tick)
@@ -93,7 +93,7 @@ INTLINKTMON EQU     50          ; Down scaled interrupts, next link timeout
 ; Next controller link serial interface ports
 RXNTRIS     EQU     TRISB       ; Rx port direction register
 RXNPORT     EQU     PORTB       ; Rx port data register
-RXNBIT      EQU     7           ; Rx input bit
+RXNBIT      EQU     5           ; Rx input bit
 ;  Half duplex so Rx and Tx use same port
 TXNTRIS     EQU     RXNTRIS     ; Tx port direction register
 TXNPORT     EQU     RXNPORT     ; Tx port data register
@@ -102,7 +102,7 @@ TXNBIT      EQU     RXNBIT      ; Tx output bit
 ; Previous controller link serial interface ports
 RXPTRIS     EQU     TRISB       ; Rx port direction register
 RXPPORT     EQU     PORTB       ; Rx port data register
-RXPBIT      EQU     6           ; Rx input bit
+RXPBIT      EQU     4           ; Rx input bit
 ;  Half duplex so Rx and Tx use same port
 TXPTRIS     EQU     RXPTRIS     ; Tx port direction register
 TXPPORT     EQU     RXPPORT     ; Tx port data register
@@ -166,9 +166,10 @@ LCHBIT      EQU     0           ; Latch stop aspect (active low)
 REVBIT      EQU     1           ; Line reversed, force stop aspect (active low)
 BIDBIT      EQU     2           ; Running line is bidirectional
 SPDBIT      EQU     3           ; Display normal speed aspects
-TOTBIT      EQU     5           ; Train on track, set block occupied if clear
-INHBIT      EQU     7           ; Inhibit, forced stop aspect (active low)
-INPMSK      EQU     B'10101111' ; Mask for input bits
+INHBIT      EQU     5           ; Inhibit, forced stop aspect (active low)
+APRBIT      EQU     6           ; Approach clear local signal (active low)
+TOTBIT      EQU     7           ; Train on track, set block occupied if clear
+INPMSK      EQU     B'11101111' ; Mask for input bits
 
 ; Detector I/O constants
 EMTPORT     EQU     PORTA       ; Emitter drive port
@@ -191,10 +192,8 @@ ENTFLG      EQU     5           ; Entrance detection bit in status byte
 ENTMSK      EQU     B'00100000' ; Entrance detection state bit mask
 BRVFLG      EQU     6           ; Block reversed bit in status byte
 BRVMSK      EQU     B'01000000' ; Block reversed state bit mask
-
-; Status flags sent to next controller, received from previous controller
-APRFLG      EQU     5           ; Approach detection bit in status byte
-APRMSK      EQU     B'00100000' ; Approach detection state bit mask
+APRFLG      EQU     7           ; Train approaching bit in status byte
+APRMSK      EQU     B'10000000' ; Train approaching state bit mask
 
 ; Status flags sent to previous controller, received from next controller
 SPDFLG      EQU     4           ; Normal speed bit in status byte

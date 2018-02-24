@@ -29,6 +29,9 @@
 ;        A train is entering the block in the reverse direction;      *
 ;        A train is leaving the block in the reverse direction.       *
 ;                                                                     *
+;    If the local block is clear  a Train on Track input is checked   *
+;    and if set the local block state is forced to occupied.          *
+;                                                                     *
 ;    If no data is being received from the previous, in rear,         *
 ;    controller the block occupation state machine is not executed as *
 ;    there is be no block entry detection available.                  *
@@ -59,6 +62,9 @@
 ;    Alternatively the input for the link to the next, in advance,    *
 ;    controller can be used to force display of a stop aspect by the  *
 ;    local signal.                                                    *
+;                                                                     *
+;    If the approach clear input is set and no train is approaching   *
+;    the Inhibit input is set so that local signal will display stop. *
 ;                                                                     *
 ;    An input can be used to cause the aspect displayed by the local  *
 ;    signal to latch at stop. That is once the signal has sequenced   *
@@ -388,6 +394,7 @@ Timing
     movf    FSR,W           ; Save current read ...
     movwf   debnce          ; ... as last read
 
+
     ; Run link reception timeouts
     ;******************************************************************
 
@@ -413,8 +420,8 @@ Timing
     ; is only done once a second so detection can be stretched to
     ; ignore any gaps between vehicles.
     ;******************************************************************
- 
-   btfss   inputs,DETBIT   ; Skip if detection input is off (active low) ...
+
+    btfss   inputs,DETBIT   ; Skip if detection input is off (active low) ...
     goto    TimingEnd       ; ... else skip stretching of exit detection
 
     btfsc   lclCntlr,STRFLG ; Skip if exit detection has not been stretched ...
@@ -438,13 +445,24 @@ TimingEnd
     ;******************************************************************
     call    ServiceNextLink
 
-    ; Set local signal aspect display output value
-    ;******************************************************************
-    call    SetAspectOutput
-
     ; Run local block occupation state machine
     ;******************************************************************
     call    RunBlockLogic
+
+
+    ; If signal approach cleared and no train approaching display stop
+    ;******************************************************************
+
+    btfsc   lclCntlr,APRFLG ; Skip if no train approaching ...
+    bsf     inputs,APRBIT   ; ... else suppress approach clear behaviour
+
+    btfss   inputs,APRBIT   ; Skip if not approach clear (active low) ...
+    bcf     inputs,INHBIT   ; ... else force local signal to display stop
+
+
+    ; Set local signal aspect display output value
+    ;******************************************************************
+    call    SetAspectOutput
 
 
     ; Line reversal can be from input or local block reversal logic
@@ -495,7 +513,7 @@ SetAspectOutput
 SetLocalAspect
     movlw   ASPMSK
     andwf   nxtCntlr,W      ; Get local signal aspect from next controller
-    btfss   inputs,INHBIT   ; Skip if signal is not inhibited (active low) ...
+    btfss   inputs,INHBIT   ; Skip if signal not inhibited (active low) ...
     clrw                    ; ... otherwise set aspect = stop
 
 #ifdef UserAspect
@@ -755,6 +773,9 @@ CheckPrevRx
 
     movwf   FSR             ; Copy the received status for bit tests later
 
+    btfsc   FSR,APRFLG      ; Skip if no approaching train detected ...
+    bsf     lclCntlr,APRFLG ; ... else set train approaching
+
     ; Previous exit detection is local entry detection
     bcf     lclCntlr,ENTFLG ; Assume entry detector is off
     btfsc   FSR,EXTFLG      ; Skip if previous exit detector is off ...
@@ -882,6 +903,7 @@ CheckExtFwd
 TrainLeavingF   ; **** State 3 - Train leaving forward ****
 
     bcf     lclCntlr,BRVFLG ; Clear local block reversed
+    bcf     lclCntlr,APRFLG ; Clear train approaching
 
     ; Check if train has left block
     btfsc   lclCntlr,EXTFLG ; Skip if exit detection off ...
@@ -947,6 +969,7 @@ CheckOccRev
 TrainLeavingR   ; **** State 6 - Train leaving reverse ****
 
     bsf     lclCntlr,BRVFLG ; Set local block reversed
+    bcf     lclCntlr,APRFLG ; Clear train approaching
 
     ; Check if train has changed direction and now spans this block
     movlw   BLOCKSPANNED    ; Possible next state
