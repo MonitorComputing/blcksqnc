@@ -170,53 +170,29 @@ RunTMR0
     ; If emitter is off detector on means interence from ambient light whereas
     ; detector off has no significance.
 
-    movf    SNSPORT,W       ; Get sensor state ...
-    movwf   FSR             ; ... and save for testing later
+    movf    SNSPORT,W       ; Get sensor state
+    xorwf   lastSnsr,W      ; XOR with state from previous sampling cycle
+    andlw   SNSMSK          ; Isolate the sensor bit
+    btfss   STATUS,Z        ; Skip if sensor has not changed state ...
+    goto    Sensing         ; ... else sensing train
 
-    btfss   EMTPORT,EMTBIT  ; Skip is emitter is off (active low)...
-    goto    EmitterOn       ; ... else check for sensor on
-
-EmitterOff
-    bcf     EMTPORT,EMTBIT  ; Turn emitter on (active low)
-    btfss   FSR,SNSBIT      ; Skip if sensor is on due ambient light ...
-    goto    DetectEnd       ; ... else train presence is indeternimable
-
-SensorOff
-    ; Absence of train or false detection due ambient light
+    ; No train detected
     decfsz  snsAcc,W        ; Decrement sensor match accumulator into W
     movwf   snsAcc          ; If result is not zero update the accumulator
-    decfsz  snsAcc,W        ; Skip if accumulator below low water ...
-    goto    DetectEnd       ; ... else leave detector indicator unchanged
-    bsf     DETPORT,DETBIT  ; Turn detector indicator off (active low)
-    goto    DetectEnd
+    goto    SensorEnd
 
-EmitterOn
-    bsf     EMTPORT,EMTBIT  ; Turn emitter off (active low)
-    btfss   FSR,SNSBIT      ; Skip if sensor is on ...
-    goto    SensorOff       ; ... else jump as sensor not detecting
-
-SensorOn
-    ; Possible presence of train
+Sensing
+    ; Train detected
     incfsz  snsAcc,W        ; Increment sensor match accumulator into W
     movwf   snsAcc          ; If result is not zero update the accumulator
-    btfsc   snsAcc,DETACTV  ; Skip if accumulator below high water ...
-    bcf     DETPORT,DETBIT  ; ... else turn detector indicator on (active low)
 
-DetectEnd
+    movf    SNSPORT,W       ; Get sensor state ...
+    movwf   lastSnsr        ; ... and capture for next sampling cycle
 
-    ; Output aspect display without altering non aspect bits on port
-    ;******************************************************************
-
-    call    GetAspectOutput
-    iorwf   ASPPORT,F       ; Set relevant aspect output bits
-    iorlw   ~ASPOUTMSK      ; Protect non aspect output bits
-    andwf   ASPPORT,F       ; Clear relevant aspect output bits
-
-    movlw   BLKSTATE
-    andwf   lclCntlr,W      ; Test block state of local block
-    bsf     OCCPORT,OCCBIT  ; Turn off occupied indicator (active low)
-    btfss   STATUS,Z        ; Skip if local block clear ...
-    bcf     OCCPORT,OCCBIT  ; ... else turn on occupied indicator (active low)
+SensorEnd
+    ; Toggle state of emmitter output
+    movlw   EMTMSK
+    xorwf   EMTPORT,F
 
     ; End Interrupt Service Routine
     ;******************************************************************
@@ -350,6 +326,17 @@ ClearRAM
 Main
     clrwdt                  ; Reset the watchdog timer
 
+    ; Check train detection accumulator
+    ;******************************************************************
+    btfsc   snsAcc,DETACTV  ; Skip if accumulator below high water ...
+    bcf     DETPORT,DETBIT  ; ... else turn detector indicator on (active low)
+
+    decf    snsAcc,W        ; Test accumulator
+    btfsc   STATUS,Z        ; Skip if accumulator not below low water ...
+    bsf     DETPORT,DETBIT  ; ... else turn detector indicator off (active low)
+
+DetectEnd
+
     ;******************************************************************
     ; Perform timing operations
     ;******************************************************************
@@ -449,6 +436,12 @@ TimingEnd
     ;******************************************************************
     call    RunBlockLogic
 
+    movlw   BLKSTATE
+    andwf   lclCntlr,W      ; Test block state of local block
+    bsf     OCCPORT,OCCBIT  ; Turn off occupied indicator (active low)
+    btfss   STATUS,Z        ; Skip if local block clear ...
+    bcf     OCCPORT,OCCBIT  ; ... else turn on occupied indicator (active low)
+
 
     ; If signal approach cleared and no train approaching display stop
     ;******************************************************************
@@ -463,6 +456,13 @@ TimingEnd
     ; Set local signal aspect display output value
     ;******************************************************************
     call    SetAspectOutput
+
+    ; Output aspect display without altering non aspect bits on port
+    ;******************************************************************
+    call    GetAspectOutput
+    iorwf   ASPPORT,F       ; Set relevant aspect output bits
+    iorlw   ~ASPOUTMSK      ; Protect non aspect output bits
+    andwf   ASPPORT,F       ; Clear relevant aspect output bits
 
 
     ; Line reversal can be from input or local block reversal logic
