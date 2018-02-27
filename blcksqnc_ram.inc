@@ -96,6 +96,7 @@ inputs          ; Input values after debouncing:
                 ;   bit 7 - ToTi, block occupied (active low)
 
 snsAcc          ; Detector sensor match (emitter state) accumulator
+lastSnsr        ; Sensor input state on previous sampling cycle
 
 
 ; Outputs
@@ -129,7 +130,7 @@ lclCntlr        ; Status of this controller:
                 ;   bit 7 - Train approaching
 
 seenRvsl        ; Line and block reversal seen for next and previous controllers
-                ;   bits 0 - 2 - Unused
+                ;   bits 0 - 4 - Unused
                 ;   bit 5      - Next line reversed
                 ;   bit 6      - Previous block reversed
                 ;   bit 7      - Unused

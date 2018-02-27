@@ -75,15 +75,15 @@ PORTASTATUS EQU     B'00100000' ; All outputs (RB4 open drain) except RB5
 PORTBSTATUS EQU     B'11001111' ; 0 - 3, 6, 7 inputs, 4 and 6 outputs
 
 ; Interrupt & timing constants
-RTCCINT     EQU     256 - 200   ; 5KHz = ((4MHz / 4) / 200) (0.2 mSec tick)
+RTCCINT     EQU     256 - 100   ; 10KHz = ((4MHz / 4) / 100) (0.1 mSec tick)
 
 ; Timing constants
-INTSCLNG    EQU     40 + 1      ; Interrupts scaling to 125Hz (8 mSec tick)
+INTSCLNG    EQU     80 + 1      ; Interrupts scaling to 125Hz (8 mSec tick)
 SECSCLNG    EQU     125 + 1     ; Down scaled interrupts per second
 HALFSEC     EQU     B'11000000' ; Seconds timer roughly half second mask
 
-INTSERINI   EQU     6           ; Interrupts per initial Rx serial bit @ 1K25
-INTSERBIT   EQU     4           ; Interrupts per serial bit @ 1K25 baud
+INTSERINI   EQU     6           ; Interrupts per initial Rx serial bit @ 2K5
+INTSERBIT   EQU     4           ; Interrupts per serial bit @ 2K5 baud
 INTLNKDLYRX EQU     0           ; Interrupts for link Rx turnaround delay
 INTLNKDLYTX EQU     10          ; Interrupts for link Tx turnaround delay
 
@@ -174,8 +174,10 @@ INPMSK      EQU     B'11101111' ; Mask for input bits
 ; Detector I/O constants
 EMTPORT     EQU     PORTA       ; Emitter drive port
 EMTBIT      EQU     7           ; Emmitter drive bit (active low)
+EMTMSK      EQU     1 << EMTBIT ; Emmitter drive bit mask (active low)
 SNSPORT     EQU     PORTA       ; Sensor input port
 SNSBIT      EQU     5           ; Sensor input bit (active high)
+SNSMSK      EQU     1 << SNSBIT ; Sensor input bit mask
 DETPORT     EQU     PORTA       ; Detection indicator port
 DETBIT      EQU     4           ; Detection indicator bit (active low)
 DETACTV     EQU     7           ; Correspondance accumulator >= high water bit
@@ -185,18 +187,18 @@ OCCBIT      EQU     6           ; Occupation indicator bit (active low)
 
 ; Local controller status flags
 STRFLG      EQU     3           ; Exit detection stretched bit in status byte
-STRMSK      EQU     B'00001000' ; Exit detection stretched state bit mask
+STRMSK      EQU     1 << STRFLG ; Exit detection stretched state bit mask
 EXTFLG      EQU     4           ; Exit detection bit in status byte
-EXTMSK      EQU     B'00010000' ; Exit detection state bit mask
+EXTMSK      EQU     1 << EXTFLG ; Exit detection state bit mask
 ENTFLG      EQU     5           ; Entrance detection bit in status byte
-ENTMSK      EQU     B'00100000' ; Entrance detection state bit mask
+ENTMSK      EQU     1 << ENTFLG ; Entrance detection state bit mask
 BRVFLG      EQU     6           ; Block reversed bit in status byte
-BRVMSK      EQU     B'01000000' ; Block reversed state bit mask
+BRVMSK      EQU     1 << BRVFLG ; Block reversed state bit mask
 APRFLG      EQU     7           ; Train approaching bit in status byte
-APRMSK      EQU     B'10000000' ; Train approaching state bit mask
+APRMSK      EQU     1 << APRFLG ; Train approaching state bit mask
 
 ; Status flags sent to previous controller, received from next controller
 SPDFLG      EQU     4           ; Normal speed bit in status byte
-SPDMSK      EQU     B'00010000' ; Normal speed state bit mask
+SPDMSK      EQU     1 << SPDFLG ; Normal speed state bit mask
 LRVFLG      EQU     5           ; Line reversed bit in status byte
-LRVMSK      EQU     B'00100000' ; Line reversed state bit mask
+LRVMSK      EQU     1 << LRVFLG ; Line reversed state bit mask
