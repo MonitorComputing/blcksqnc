@@ -8,16 +8,23 @@
 ;    Controller provides drive to emitter and accepts input from      *
 ;    sensor of a reflective IR detector. Correspondance is tallied so *
 ;    that high and low watermarks can be used to deem when detection  *
-;    takes place. Duration of detection is stretched by approximately *
-;    one second to accomodate gaps between vehicles.                  *
+;    takes place. Duration of positive detection is stretched by      *
+;    approximately one second to accomodate gaps between vehicles.    *
 ;                                                                     *
 ;    Detection is indicated using an open drain output which is read  *
 ;    back so that an alternative detector can be connected as a wired *
 ;    or in addition, or as an alternative, to the built in detection. *
 ;                                                                     *
-;    Local detection is sent to the next, in advance, controller and  *
-;    hence received by this controller from the previous, in rear,    *
-;    controller.                                                      *
+;    Local exit detection is sent to the next, in advance, controller *
+;    and hence received by this controller from the previous, in rear,*
+;    controller. Previous, in rear, controller exit detection is used *
+;    as entry detection by local controller.                          *
+;                                                                     *
+;    Local exit detection is also sent to the next, in advance,       *
+;    controller as approach detection. This is doen as a separate bit *
+;    in the status so that an intermediate detector could be added to *
+;    override the approach bit and provide for approach detection     *
+;    closer to the next, in advance, controller.                      *
 ;                                                                     *
 ;    The local block occupation state machine uses the local, exit,   *
 ;    and previous, entry, detection to determine if:                  *
@@ -29,7 +36,7 @@
 ;        A train is entering the block in the reverse direction;      *
 ;        A train is leaving the block in the reverse direction.       *
 ;                                                                     *
-;    If the local block is clear  a Train on Track input is checked   *
+;    If the local block is clear a Train on Track input is checked    *
 ;    and if set the local block state is forced to occupied.          *
 ;                                                                     *
 ;    If no data is being received from the previous, in rear,         *
@@ -44,20 +51,20 @@
 ;    advance, and previous, in rear, controllers. This allows the     *
 ;    reversal condition, and restoration to forward running, to be    *
 ;    propogated back through a chain of controllers. There is a       *
-;    bidirectional input which stops this propogation at any          *
-;    controller at which the input is not set.                        *
+;    bidirectional input which stops this propogation to the previous,*
+;    in rear, at any controller at which the input is not set.        *
 ;                                                                     *
 ;    The controller determines the aspects to be displayed by the     *
 ;    signal guarding the local occupation block but that signal is    *
 ;    located at the previous, in rear, controller and the information *
 ;    is sent to that controller for output. Conversely the controller *
-;    receives aspect information to be out put to the local signal    *
+;    receives aspect information to be output to the local signal     *
 ;    from the next, in advance, controller.                           *
 ;                                                                     *
 ;    If no data is being received from the next, in advance,          *
 ;    controller then the sequencing of aspects to display after a     *
 ;    train exits the occupation block in the forward direction is     *
-;    simulated.                                                       *
+;    simulated locally.                                               *
 ;                                                                     *
 ;    Alternatively the input for the link to the next, in advance,    *
 ;    controller can be used to force display of a stop aspect by the  *
@@ -75,18 +82,20 @@
 ;    The aspect to be displayed by the signal guarding the local      *
 ;    block (connected to the previous, in rear, controller) depends   *
 ;    on a number of factors:                                          *
-;        If block is occupied, not clear, display stop;               *
+;        If block is not clear (i.e. occupied) display stop;          *
 ;        If running is reversed in the block display stop;            *
 ;        Otherwise display next aspect in sequence from stop to clear *
 ;        after aspect received from next, in advance, controller (or  *
-;        simulated if no link).                                       *
+;        simulated locally if reception from next controller has      *
+;        timed out).                                                  *
 ;                                                                     *
 ;    The aspect to be displayed by the local signal guarding the      *
 ;    next, in advance, block depends on a number of factors:          *
 ;        If signal is inhibited locally display stop;                 *
 ;        If signal is latched locally hold at stop once reached;      *
 ;        Otherwise display aspect received from next, in advance,     *
-;        controller (or simulated if no link).                        *
+;        controller (or simulated locally if reception from next      *
+;        controller has timed out).                                   *
 ;                                                                     *
 ;    There is also a special speed input which can be employed by     *
 ;    controller specialisations to display location specific speed    *
@@ -116,10 +125,10 @@
     goto    Initialise      ; Jump to beginning of program
 
 
+
 ;**********************************************************************
 ; Interrupt Service Routine
 ;**********************************************************************
-
             org IntVector   ; Interrupt vector location
 
 BeginISR
@@ -143,33 +152,24 @@ RunTMR0
     movlw   RTCCINT + 3     ; Add 3 cycles for TMR0 write increment and inhibit
     addwf   TMR0,F          ; Reload TMR0
 
+
     ; Service next controller link
     ;******************************************************************
-
     SrvcLink  lnkNState, serNTimer, INTLNKDLYRX, INTLNKDLYTX, EnableTxN, InitTxN, SrvcTxN, TxBreakN, EnableRxN, InitRxN, SrvcRxN
 
     ; Service previous controller link
     ;******************************************************************
-
     SrvcLink  lnkPState, serPTimer, INTLNKDLYRX, INTLNKDLYTX, EnableTxP, InitTxP, SrvcTxP, TxBreakP, EnableRxP, InitRxP, SrvcRxP
+
 
     ; Run interrupt scaling counter for down scaled timing
     ;******************************************************************
-
     decfsz  intScCount,W    ; Decrement interrupt scaling counter into W
     movwf   intScCount      ; If result is not zero update the counter
 
+
     ; Run train detection
     ;******************************************************************
-
-    ; Detector is designed to float at 2.5V, just above TTL off threshold and
-    ; filtered to ignore low frequency signals in order to reject ambient light
-    ; sources. Hence
-    ; If emmitter is on detector on could mean train present or inteference
-    ; from ambient light whereas detector off means no train present.
-    ; If emitter is off detector on means interence from ambient light whereas
-    ; detector off has no significance.
-
     movf    SNSPORT,W       ; Get sensor state
     xorwf   lastSnsr,W      ; XOR with state from previous sampling cycle
     andlw   SNSMSK          ; Isolate the sensor bit
@@ -194,15 +194,15 @@ SensorEnd
     movlw   EMTMSK
     xorwf   EMTPORT,F
 
+
     ; End Interrupt Service Routine
     ;******************************************************************
-
     btfsc   INTCON,T0IF     ; Skip if no TMR0 overflow during ISR ...
     goto    RunTMR0         ; ... else run service routine again
 
+
     ; Exit Interrupt Service Routine
     ;******************************************************************
-
 ExitISR
     movf    pclath_isr,W    ; Retrieve copy of PCLATH register
     movwf   PCLATH          ; Restore pre-isr PCLATH register contents
@@ -216,20 +216,39 @@ ExitISR
     retfie                  ; return from Interrupt
 
 
+
 ;**********************************************************************
 ; Main program initialisation code
 ;**********************************************************************
-
 Initialise
-
-    ; Initialise ports
-    ;******************************************************************
-
-    movlw   (1 << CM2) | (1 << CM1) | (1 << CM0)
-    movwf   CMCON           ; Using port A for I/O so disable comparators
 
     clrf    PORTA
     clrf    PORTB
+
+    BANKSEL OPTION_REG
+
+    bsf     PCON,OSCF       ; Ensure internal oscillator set 4MHz
+
+    ; Set option register:
+    ;******************************************************************
+    ;   Prescaler assignment - watchdog timer, maximum prescaling
+    movlw   (1 << PSA) | (1 << PS2) | (1 << PS1) | (1 << PS0)
+    movwf   OPTION_REG
+
+
+    ; Program I/O port bit directions
+    ;******************************************************************
+    movlw   PORTASTATUS
+    movwf   TRISA
+    movlw   PORTBSTATUS
+    movwf   TRISB
+
+    BANKSEL TMR0
+
+    ; Initialise ports
+    ;******************************************************************
+    movlw   (1 << CM2) | (1 << CM1) | (1 << CM0)
+    movwf   CMCON           ; Using port A for I/O so disable comparators
 
     movlw   PORTASTATUS     ; For Port A need to write one to each bit ...
     movwf   PORTA           ; ... being used for input
@@ -237,33 +256,8 @@ Initialise
     bsf     EMTPORT,EMTBIT  ; Ensure detector emmitter is off (active low)
     bsf     DETPORT,DETBIT  ; Ensure detector indicator is off (active low)
 
-    BANKSEL OPTION_REG
-
-    ; Program I/O port bit directions
-    ;******************************************************************
-
-    movlw   PORTASTATUS
-    movwf   TRISA
-    movlw   PORTBSTATUS
-    movwf   TRISB
-
-    ; Ensure internal oscillator set 4MHz
-    ;******************************************************************
-
-    bsf     PCON,OSCF
-
-    ; Set option register:
-    ;******************************************************************
-    ;   Prescaler assignment - watchdog timer, maximum prescaling
-
-    movlw   (1 << PSA) | (1 << PS2) | (1 << PS1) | (1 << PS0)
-    movwf   OPTION_REG
-
-    BANKSEL TMR0
-
     ; Initialise RAM to zero
     ;******************************************************************
-
     movlw   endRAM          ; Address of end of RAM
     movwf   RAM0_Start      ; Ensure first byte of RAM is non zero
     movwf   FSR             ; Point indirect register to end of RAM
@@ -281,18 +275,18 @@ ClearRAM
     comf    debnce,F
     comf    inputs,F
 
+
     ; Initialise controller links
     ;******************************************************************
-
     MaxLw   INTLINKTMON, 1
-    movwf   lnkNTimer       ; Initialise next link reception timeout
+    movwf   lnkNTimer           ; Initialise next link reception timeout
 
     bsf     lnkPState,LNKDIRFLG ; Initially send to previous link
     bsf     lnkPState,NOPFLG    ; Presume not received from previous link
 
-    ; Initialise timing
-    ;******************************************************************
 
+   ; Initialise timing
+    ;******************************************************************
     movlw   low EEaspectTime
     call    ReadEEPROM
     movwf   aspectTime      ; Initialise aspect interval for next signal
@@ -303,15 +297,15 @@ ClearRAM
     movlw   SECSCLNG        ; Initialise one second ...
     movwf   secCount        ; ... scaled interrupts counter
 
-    ; Optional initialisation (user code should define UserInit macro)
-    ;******************************************************************
+
 #ifdef UserInit
+    ; Optional user initialisation code (define UserInit macro)
     UserInit
 #endif
 
+
     ; Initialise interrupts
     ;******************************************************************
-
     movlw   RTCCINT
     movwf   TMR0            ; Initialise TMR0 for timer interrupts
     clrf    INTCON          ; Disable all interrupt sources
@@ -319,10 +313,10 @@ ClearRAM
     bsf     INTCON,GIE      ; Enable interrupts
 
 
+
 ;**********************************************************************
 ; Top of main processing loop
 ;**********************************************************************
-
 Main
     clrwdt                  ; Reset the watchdog timer
 
@@ -335,13 +329,11 @@ Main
     btfsc   STATUS,Z        ; Skip if accumulator not below low water ...
     bsf     DETPORT,DETBIT  ; ... else turn detector indicator off (active low)
 
-DetectEnd
 
     ;******************************************************************
     ; Perform timing operations
     ;******************************************************************
 
-Timing
     ; To keep the interrupt service routine as brief as possible timing is
     ; performed by the interrupt service routing decrementing a counter until
     ; it reaches 1.  Here in the main program loop (i.e. outside the interrupt
@@ -350,7 +342,6 @@ Timing
 
     ; Scaled down interrupts timing
     ;******************************************************************
-
     decfsz  intScCount,W    ; Test interrupts scaling counter
     goto    TimingEnd       ; Skip if a interrupt scaling has not elapsed
 
@@ -384,12 +375,12 @@ Timing
 
     ; Run link reception timeouts
     ;******************************************************************
-
     decfsz  lnkPTimer,W     ; Check previous controller link reception timeout
     movwf   lnkPTimer       ; Update timeout counter if not yet timed out
 
     decfsz  lnkNTimer,W     ; Check next controller link reception timeout
     movwf   lnkNTimer       ; Update timeout counter if not yet timed out
+
 
     ; Run one second timing
     ;******************************************************************
@@ -403,11 +394,10 @@ Timing
     decfsz  nxtTimer,W      ; Decrement next signal simulation timer into W
     movwf   nxtTimer        ; Update timeout counter if not yet timed out
 
-    ; Check status of train detection input (active low) for off. This
-    ; is only done once a second so detection can be stretched to
-    ; ignore any gaps between vehicles.
+    ; Check status of local train detection input (active low) for off.
+    ; This is only done once a second so detection can be stretched to
+    ; help ignore any gaps between vehicles.
     ;******************************************************************
-
     btfss   inputs,DETBIT   ; Skip if detection input is off (active low) ...
     goto    TimingEnd       ; ... else skip stretching of exit detection
 
@@ -419,9 +409,8 @@ Timing
 TimingEnd
 
 
-    ; Check status of train detection input (active low) for on
+    ; Check status of local train detection input (active low) for on
     ;******************************************************************
-
     btfss   inputs,DETBIT   ; Skip if detection input is off (active low) ...
     bsf     lclCntlr,EXTFLG ; ... else set exit detection state to on
     btfss   inputs,DETBIT   ; Skip if detection input is off (active low) ...
@@ -432,42 +421,12 @@ TimingEnd
     ;******************************************************************
     call    ServiceNextLink
 
+
     ; Run local block occupation state machine
     ;******************************************************************
     call    RunBlockLogic
 
-    movlw   BLKSTATE
-    andwf   lclCntlr,W      ; Test block state of local block
-    bsf     OCCPORT,OCCBIT  ; Turn off occupied indicator (active low)
-    btfss   STATUS,Z        ; Skip if local block clear ...
-    bcf     OCCPORT,OCCBIT  ; ... else turn on occupied indicator (active low)
-
-
-    ; If signal approach cleared and no train approaching display stop
-    ;******************************************************************
-
-    btfsc   lclCntlr,APRFLG ; Skip if no train approaching ...
-    bsf     inputs,APRBIT   ; ... else suppress approach clear behaviour
-
-    btfss   inputs,APRBIT   ; Skip if not approach clear (active low) ...
-    bcf     inputs,INHBIT   ; ... else force local signal to display stop
-
-
-    ; Set local signal aspect display output value
-    ;******************************************************************
-    call    SetAspectOutput
-
-    ; Output aspect display without altering non aspect bits on port
-    ;******************************************************************
-    call    GetAspectOutput
-    iorwf   ASPPORT,F       ; Set relevant aspect output bits
-    iorlw   ~ASPOUTMSK      ; Protect non aspect output bits
-    andwf   ASPPORT,F       ; Clear relevant aspect output bits
-
-
     ; Line reversal can be from input or local block reversal logic
-    ;******************************************************************
-
     btfsc   lclCntlr,BRVFLG ; Skip if local block not reversed ...
     bcf     inputs,REVBIT   ; ... else set line reversed (active low)
 
@@ -475,15 +434,22 @@ TimingEnd
     bsf     inputs,REVBIT   ; ... else line reversal not alllowed (active low)
 
 
+    ; Output aspect display without altering non aspect bits on port
+    ;******************************************************************
+    call    SetAspectOutput
+    call    GetAspectOutput ; Get aspect output bit value into accumulator
+    iorwf   ASPPORT,F       ; Set relevant aspect output bits
+    iorlw   ~ASPOUTMSK      ; Protect non aspect output bits
+    andwf   ASPPORT,F       ; Clear relevant aspect output bits
+
+
     ; Service link with previous controller
     ;******************************************************************
     call    ServicePrevLink
 
 
-    ;******************************************************************
-    ; Optional main loop code (user code should define UserMain macro)
-    ;******************************************************************
 #ifdef UserMain
+    ; Optional user main loop code (define UserMain macro)
     UserMain
 #endif
 
@@ -494,11 +460,11 @@ TimingEnd
     goto    Main
 
 
+
 ;**********************************************************************
 ; Subroutine to set local signal aspect display output value
 ;**********************************************************************
 SetAspectOutput
-
     ; Unless the local signal is latched or inhibited this controller displays
     ; the received, or simulated, signal aspect for the next block
 
@@ -511,12 +477,21 @@ SetAspectOutput
     return                  ; ... otherwise leave local aspect = stop
 
 SetLocalAspect
+    ; If signal approach cleared and no train approaching display stop
+
+    btfsc   lclCntlr,APRFLG ; Skip if no train approaching ...
+    bsf     inputs,APRBIT   ; ... else suppress approach clear (active low)
+
+    btfss   inputs,APRBIT   ; Skip if not approach clear (active low) ...
+    bcf     inputs,INHBIT   ; ... else inhibit local signal (active low)
+
     movlw   ASPMSK
     andwf   nxtCntlr,W      ; Get local signal aspect from next controller
     btfss   inputs,INHBIT   ; Skip if signal not inhibited (active low) ...
     clrw                    ; ... otherwise set aspect = stop
 
 #ifdef UserAspect
+    ; Optional user signal aspect code (define UserAspect macro)
     UserAspect
 #endif
 
@@ -524,17 +499,17 @@ SetLocalAspect
     return
 
 
+
 ;**********************************************************************
 ; Subroutine to service link with next controller
 ;**********************************************************************
 ServiceNextLink
-
     btfss   lnkNState,LNKDIRFLG ; Skip if replying to next controller ...
     goto    CheckNextRx         ; ... else skip over next controller send
 
+
     ; Send status reply to next controller
     ;******************************************************************
-
     movf    lclCntlr,W      ; Send local controller status
 
     ; Local exit detection is also sent as approach detection
@@ -543,13 +518,13 @@ ServiceNextLink
     iorlw   APRMSK          ; ... else send approach detection on
 
 #ifdef UserNextTx
+    ; Optional user next link Tx code (define UserNextTx macro)
     UserNextTx
 #endif
 
     ; Only three bits of status (exit detection, approach detection, and block
     ; reversed) are sent so as a simple error check these are sent in low
     ; nibble with ones complement in high nibble
-
     iorlw   0x0F            ; Status bits - high nibble, 0xF - low nibble
 
     movwf   FSR             ; Copy status bits - high nibble, 0xF - low nibble
@@ -567,10 +542,10 @@ ServiceNextLink
 
     return
 
-CheckNextRx
-    ; Look for status received from next controller
-    ;******************************************************************
 
+CheckNextRx
+    ; Check for status received from next controller
+    ;******************************************************************
     call    LinkRxN         ; Check for data from next controller
     btfss   STATUS,Z        ; Skip if data received ...
     goto    NextRxSkip      ; ... else skip over next controller receive
@@ -578,7 +553,6 @@ CheckNextRx
     ; Only four bits of status (aspect value, line reversed, and special speed)
     ; are received so as a simple error check these are sent in low nibble with
     ; ones complement in high nibble.
-
     movwf   FSR             ; Store the received data
     swapf   FSR,W           ; Status bits - high nibble, complement - low nibble
     comf    FSR,F           ; Complement - high nibble, status bits - low nibble
@@ -588,13 +562,13 @@ CheckNextRx
 
     ; As a simple error check received data is ignored unless same value
     ; received twice in succession
-
     xorwf   telemNxt,F      ; Test against last received data
     movwf   telemNxt        ; Replace last received data
     btfss   STATUS,Z        ; Skip if last and just received data match ...
     return                  ; ... else ignore just received data
 
 #ifdef UserNextRx
+    ; Optional user next link Rx code (define UserNextRx macro)
     UserNextRx
 #endif
 
@@ -602,8 +576,9 @@ CheckNextRx
 
     bsf     lnkNState,LNKDIRFLG ; Start replying to next controller
 
-    ; If next line reversal has changed and block clear set block reversal
 
+    ; If next line reversal has changed and block clear set block reversal
+    ;******************************************************************
     xorwf   seenRvsl,W      ; Test for change of next line reversal
     andlw   LRVMSK
     btfsc   STATUS,Z        ; Skip if next line reversal has changed ...
@@ -624,10 +599,8 @@ CheckNextRx
     return
 
 NextRxSkip
-
     ; Test if next controller link has timedout
     ;******************************************************************
-
     decf    lnkNTimer,W     ; Check link reception timeout
     btfsc   STATUS,Z        ; Skip if link not timedout ...
     goto    NextLinkFailed  ; ... else handle link failure
@@ -642,9 +615,14 @@ NextRxSkip
 NextLinkFailed
     ; Next controller link timed out, simulate next signal sequencing
     ;******************************************************************
-
     bcf     nxtCntlr,LRVFLG ; Clear next block line reversed
     bsf     nxtCntlr,SPDFLG ; Set next signal normal speed
+
+    ; If local block is clear exit detection indicates reversal
+    movlw   BLKSTATE
+    andwf   lclCntlr,W      ; Test occupation state of local block
+    btfsc   STATUS,Z        ; Skip if local block occupied ...
+    goto    RunNextSignal   ; ... else ignore exit detection
 
     btfss   lclCntlr,BRVFLG ; Ignore exit detection if local block reversed ...
     btfsc   inputs,DETBIT   ; ... skip if exit detection on (active low) ...
@@ -674,11 +652,11 @@ TimeNextSignal
     return
 
 
+
 ;**********************************************************************
 ; Subroutine to service link with previous controller
 ;**********************************************************************
 ServicePrevLink
-
     btfss   lnkPState,LNKDIRFLG ; Skip if not waiting on reply from previous
     goto    CheckPrevRx         ; ... else skip over previous controller send
 
@@ -688,7 +666,6 @@ ServicePrevLink
     ; Local block's signal aspect value (displayed by previous controller)
     ; depends on the aspect value of the local signal, unless the local block
     ; is occupied (not clear) or the line is reversed.
-
     movlw   BLKSTATE
     andwf   lclCntlr,W      ; Test block state of local block
     btfss   STATUS,Z        ; Skip if local block clear ...
@@ -707,14 +684,14 @@ SendAspects
     btfsc   inputs,SPDBIT   ; Skip if local signal not normal speed ...
     iorlw   SPDMSK          ; ... else send normal speed to previous controller
 
-#ifdef UserPreviousTx
-    UserPreviousTx
+#ifdef UserPrevTx
+    ; Optional user previous link Tx code (define UserPrevTx macro)
+    UserPrevTx
 #endif
 
     ; Only aspect value, line reversed, and normal speed are sent so as a
     ; simple error check these are sent in low nibble with ones complement in
     ; high nibble.
-
     iorlw   0x0F            ; Status bits - high nibble, 0xF - low nibble
 
     movwf   FSR             ; Copy status bits - high nibble, 0xF - low nibble
@@ -732,10 +709,10 @@ SendAspects
     MaxLw   INTLINKTMOP, 1
     movwf   lnkPTimer       ; Start reception timeout
 
+
 CheckPrevRx
     ; Check for status reply from previous controller
     ;******************************************************************
-
     decf    lnkPTimer,W     ; Check link reception timeout
     btfsc   STATUS,Z        ; Skip if link not timedout ...
     bsf     lnkPState,NOPFLG ; ... else set no reception from previous link flag
@@ -749,7 +726,6 @@ CheckPrevRx
     ; Only three bits of status (entry detection, approach detection, and block
     ; reversed) are received so as a simple error check these are sent in low
     ; nibble with ones complement in high nibble
-
     movwf   FSR             ; Store the received data
     swapf   FSR,W           ; Status bits - high nibble, complement - low nibble
     comf    FSR,F           ; Complement - high nibble, status bits - low nibble
@@ -759,7 +735,6 @@ CheckPrevRx
 
     ; As a simple error check received data is ignored unless same value
     ; received twice in succession
-
     xorwf   telemPrv,F      ; Test against last received data
     movwf   telemPrv        ; Replace last received data
     btfss   STATUS,Z        ; Skip if last and just received data match ...
@@ -767,8 +742,9 @@ CheckPrevRx
 
     bcf     lnkPState,NOPFLG ; Clear no reception from previous link flag
 
-#ifdef UserPreviousRx
-    UserPreviousRx
+#ifdef UserPrevRx
+    ; Optional user previous link Rx code (define UserPrevRx macro)
+    UserPrevRx
 #endif
 
     movwf   FSR             ; Copy the received status for bit tests later
@@ -782,7 +758,7 @@ CheckPrevRx
     bsf     lclCntlr,ENTFLG ; ... else entry detector is on
 
     ; If previous block reversal has changed and block clear copy block reversal
-
+    ;******************************************************************
     xorwf   seenRvsl,W      ; Test for change of next line reversal
     andlw   BRVMSK
     btfsc   STATUS,Z        ; Skip if previous block reversal has changed ...
@@ -805,21 +781,23 @@ PrevRxDone
     return
 
 
+
 ;**********************************************************************
 ; Subroutine to run local occupation block state machine
 ;**********************************************************************
 RunBlockLogic
-
     btfsc   lnkPState,NOPFLG ; Skip if receiving data from previous link ...
     return                   ; ... else don't run block logic
 
     movlw   high BlockTable ; Load jump table address high byte ...
     movwf   PCLATH          ; ... into PCLATH to make jump in same code block
-    movf    lclCntlr,W      ; Use current state value ...
+    movf    lclCntlr,W      ;  ...
 
 BlockStateJump
-    andlw   BLKSTATE        ; ... (after removing flag and aspect bits) ...
-    addwf   PCL,F           ; ... as offset into state jump table
+    andlw   BLKSTATE        ; Isolate block state value
+    btfss   STATUS,Z        ; Skip if local block clear ...
+    bcf     OCCPORT,OCCBIT  ; ... else turn on occupied indicator (active low)
+    addwf   PCL,F           ; Use state value as offset into jump table
 
 BlockTable
     goto    BlockClear      ; State 0 - Block clear
@@ -843,6 +821,7 @@ NewBlkState
 
 
 BlockClear      ; **** State 0 - Block clear ****
+    bsf     OCCPORT,OCCBIT  ; Turn off occupied indicator (active low)
 
 CheckNtrRev
     ; Check for train entering in reverse
@@ -864,7 +843,6 @@ CheckNtrFwd
 
 
 TrainEnteringF  ; **** State 1 - Train entering forward ****
-
     bcf     lclCntlr,BRVFLG ; Clear local block reversed
 
 ChkSpnFwd
@@ -986,11 +964,12 @@ TrainLeavingR   ; **** State 6 - Train leaving reverse ****
     goto    NewBlkState     ; Change State
 
 
+
 ;**********************************************************************
 ; Subroutine to read EEPROM
 ;**********************************************************************
-
 ReadEEPROM
+    BANKSEL EEADR
     movwf   EEADR           ; Set address of EEPROM location to read
     BANKSEL EECON1
     bsf     EECON1,RD       ; Trigger EEPROM read
@@ -1000,8 +979,9 @@ ReadEEPROM
     return
 
 
+
 ;**********************************************************************
-; Instance next block interface routine macros
+; Instance next block interface subroutines from macros
 ;**********************************************************************
 
 EnableRxN   EnableRx  RXNTRIS, RXNPORT, RXNBIT
@@ -1033,7 +1013,7 @@ LinkTxN     LinkTx  lnkNState, SerTxN
 
 
 ;**********************************************************************
-; Instance previous block interface routine macros
+; Instance previous block interface subroutines from macros
 ;**********************************************************************
 
 EnableRxP   EnableRx  RXPTRIS, RXPPORT, RXPBIT
