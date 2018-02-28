@@ -72,7 +72,7 @@ RAM1_End    EQU     0xEF
 
 ; I/O port direction masks
 PORTASTATUS EQU     B'00100000' ; All outputs (RB4 open drain) except RB5
-PORTBSTATUS EQU     B'11001111' ; 0 - 3, 6, 7 inputs, 4 and 6 outputs
+PORTBSTATUS EQU     B'11001111' ; 0 - 3, 6, 7 inputs, 4 and 5 outputs
 
 ; Interrupt & timing constants
 RTCCINT     EQU     256 - 100   ; 10KHz = ((4MHz / 4) / 100) (0.1 mSec tick)
