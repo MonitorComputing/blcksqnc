@@ -79,8 +79,11 @@ telemPrv        ; Data previously received from previous controller
 intScCount      ; Interrupt counter for down scaled timing
 secCount        ; Down scaled interrupts counter for second timing
 
-aspectTime      ; Aspect interval for simulating next signal
-nxtTimer        ; Second counter for simulating next signal
+transitTime     ; Time take for train to transit local occupation block
+aspectMax       ; Maximum seconds allowed for train to transit next block
+aspectMin       ; Minimum seconds allowed for train to transit next block
+aspectTime      ; Signal aspect simulation time
+nxtTimer        ; Signal aspect simulation timer
 
 
 ; Inputs

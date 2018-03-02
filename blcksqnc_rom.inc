@@ -19,4 +19,5 @@
 
             ORG EEpromStart ; EEPROM data area
 
-EEaspectTime    DE  10      ; Seconds to delay between aspect changes
+EEaspectMax DE  21  ; Maximum seconds allowed for train to transit next block
+EEaspectMin DE   7  ; Minimum seconds allowed for train to transit next block

@@ -64,7 +64,11 @@
 ;    If no data is being received from the next, in advance,          *
 ;    controller then the sequencing of aspects to display after a     *
 ;    train exits the occupation block in the forward direction is     *
-;    simulated locally.                                               *
+;    simulated locally. The time simulated for the train to clear the *
+;    next is the time take for the train to clear the local block     *
+;    subject to a minimum and maximum limit. The simulated time for   *
+;    each subsequent block is half the previous subject to those same *
+;    minimum and maximum limits.                                      *
 ;                                                                     *
 ;    Alternatively the input for the link to the next, in advance,    *
 ;    controller can be used to force display of a stop aspect by the  *
@@ -287,10 +291,15 @@ ClearRAM
 
    ; Initialise timing
     ;******************************************************************
-    movlw   low EEaspectTime
+    movlw   low EEaspectMax
     call    ReadEEPROM
-    movwf   aspectTime      ; Initialise aspect interval for next signal
-    movwf   nxtTimer        ; Initialise timer used to simulate next signal
+    movwf   aspectMax       ; Initialise next block maximum transit time
+
+    movlw   low EEaspectMin
+    call    ReadEEPROM
+    movwf   aspectMin       ; Initialise next block minimum transit time
+    movwf   aspectTime      ; Initialise signal aspect simulation time
+    movwf   nxtTimer        ; Initialise signal aspect simulation timer
 
     movlw   INTSCLNG        ; Initialise interrupt ...
     movwf   intScCount      ; ...  scaling counter
@@ -399,6 +408,9 @@ Main
     decfsz  nxtTimer,W      ; Decrement next signal simulation timer into W
     movwf   nxtTimer        ; Update timeout counter if not yet timed out
 
+    incfsz  transitTime,W   ; Increment time for train to transit block
+    movwf   transitTime     ; Update time if no overflow to zero
+
     ; Check status of local train detection input (active low) for off.
     ; This is only done once a second so detection can be stretched to
     ; help ignore any gaps between vehicles.
@@ -453,6 +465,12 @@ TimingEnd
     call    ServicePrevLink
 
 
+    ; If entry detected reset time for train to transit local block
+    ;******************************************************************
+    btfsc   lclCntlr,ENTFLG ; Skip if entry into block not detected ...
+    clrf    transitTime     ; ... else reset transit time
+
+
 #ifdef UserMain
     ; Optional user main loop code (define UserMain macro)
     UserMain
@@ -501,6 +519,27 @@ SetLocalAspect
 #endif
 
     movwf   aspVal          ; Save aspect display value
+    return
+
+
+
+;**********************************************************************
+; Subroutine to get aspect time to simulate train transiting next block
+;**********************************************************************
+GetAspectTime
+    movf    aspectTime,W
+    subwf   aspectMax,W     ; Subtract aspectTime from aspectMax
+    movf    aspectMax,W
+    btfss   STATUS,C        ; Skip if aspectTime <= aspectMax ...
+    return                  ; ... else return aspectMax
+
+    movf    aspectMin,W
+    subwf   aspectTime,W    ; Subtract aspectMin from aspectTime
+    movf    aspectMin,W
+    btfss   STATUS,C        ; Skip if aspectMin <= aspectTime ...
+    return                  ; ... else return aspectMin
+
+    movf    aspectTime,W
     return
 
 
@@ -630,7 +669,7 @@ NextLinkFailed
     goto    RunNextSignal   ; ... else ignore exit detection
 
     btfss   lclCntlr,BRVFLG ; Ignore exit detection if local block reversed ...
-    btfsc   inputs,DETBIT   ; ... skip if exit detection on (active low) ...
+    btfss   lclCntlr,EXTFLG ; ... skip if exit detection on ...
     goto    RunNextSignal   ; ... else run next signal simulation
 
     ; Exit detection whilst normal running so set simulated next signal aspect
@@ -638,6 +677,9 @@ NextLinkFailed
     ; next block
     movlw   ~ASPMSK
     andwf   nxtCntlr,F
+
+    movf    transitTime,W   ; Use measured local block transit time ...
+    movwf   aspectTime      ; ... as initial next block transit simulation time
     goto    TimeNextSignal
 
 RunNextSignal
@@ -652,8 +694,13 @@ RunNextSignal
 
 TimeNextSignal
     ; Load aspect timer for the duration of the new aspect
-    movf    aspectTime,W
+    call    GetAspectTime
     movwf   nxtTimer
+
+    bcf     STATUS,C
+    rrf     nxtTimer,W      ; Halve the ...
+    movwf   aspectTime      ; ... next block transit simulation time
+
     return
 
 
