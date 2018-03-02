@@ -372,6 +372,11 @@ Main
     movf    FSR,W           ; Save current read ...
     movwf   debnce          ; ... as last read
 
+#ifdef UserInputs
+    ; Optional user input manipulation code (define UserInputs macro)
+    UserInputs
+#endif
+
 
     ; Run link reception timeouts
     ;******************************************************************
