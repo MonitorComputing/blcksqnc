@@ -21,7 +21,7 @@
 ;    as entry detection by local controller.                          *
 ;                                                                     *
 ;    Local exit detection is also sent to the next, in advance,       *
-;    controller as approach detection. This is doen as a separate bit *
+;    controller as approach detection. This is done as a separate bit *
 ;    in the status so that an intermediate detector could be added to *
 ;    override the approach bit and provide for approach detection     *
 ;    closer to the next, in advance, controller.                      *
@@ -52,7 +52,7 @@
 ;    reversal condition, and restoration to forward running, to be    *
 ;    propogated back through a chain of controllers. There is a       *
 ;    bidirectional input which stops this propogation to the previous,*
-;    in rear, at any controller at which the input is not set.        *
+;    in rear, by any controller at which the input is not set.        *
 ;                                                                     *
 ;    The controller determines the aspects to be displayed by the     *
 ;    signal guarding the local occupation block but that signal is    *
