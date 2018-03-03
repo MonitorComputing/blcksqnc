@@ -78,15 +78,16 @@ PORTASTATUS EQU     B'00100000' ; All outputs (RB4 open drain) except RB5
 PORTBSTATUS EQU     B'11001111' ; 0 - 3, 6, 7 inputs, 4 and 5 outputs
 
 ; Interrupt & timing constants
-RTCCINT     EQU     256 - 100   ; 10KHz = ((4MHz / 4) / 100) (0.1 mSec tick)
+TMR2INT     EQU     256 - 100   ; 10KHz = ((4MHz / 4) / 100) (0.1 mSec tick)
+TMR0INT     EQU     256 - 200   ; 5KHz = ((4MHz / 4) / 200) (0.2 mSec tick)
 
 ; Timing constants
-INTSCLNG    EQU     80 + 1      ; Interrupts scaling to 125Hz (8 mSec tick)
+INTSCLNG    EQU     40 + 1      ; Interrupts scaling to 125Hz (8 mSec tick)
 SECSCLNG    EQU     125 + 1     ; Down scaled interrupts per second
 HALFSEC     EQU     B'11000000' ; Seconds timer roughly half second mask
 
-INTSERINI   EQU     6           ; Interrupts per initial Rx serial bit @ 2K5
-INTSERBIT   EQU     4           ; Interrupts per serial bit @ 2K5 baud
+INTSERINI   EQU     6           ; Interrupts per initial Rx serial bit @ 1K25
+INTSERBIT   EQU     4           ; Interrupts per serial bit @ 1K25 baud
 INTLNKDLYRX EQU     0           ; Interrupts for link Rx turnaround delay
 INTLNKDLYTX EQU     10          ; Interrupts for link Tx turnaround delay
 
