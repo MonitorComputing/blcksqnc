@@ -262,14 +262,14 @@ Initialise
 
     ; Initialise RAM to zero
     ;******************************************************************
-    movlw   endRAM          ; Address of end of RAM
-    movwf   RAM0_Start      ; Ensure first byte of RAM is non zero
+    movlw   endRAM0         ; Address of end of Bank 0 RAM
+    movwf   RAM0_Start      ; Ensure first byte of Bank 0 RAM is non zero
     movwf   FSR             ; Point indirect register to end of RAM
 
 ClearRAM
     clrf    INDF            ; Clear byte of RAM addressed by FSR
     decf    FSR,F           ; Decrement FSR to next byte of RAM
-    movf    RAM0_Start,F    ; Test first byte of RAM
+    movf    RAM0_Start,F    ; Test first byte of Bank 0 RAM
     btfss   STATUS,Z        ; Skip if byte of RAM now zero ...
     goto    ClearRAM        ; ... else continue to clear RAM
 
