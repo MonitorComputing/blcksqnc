@@ -136,9 +136,6 @@
             org IntVector   ; Interrupt vector location
 
 BeginISR
-    btfss   INTCON,T0IF     ; Skip if TMR0 overflow interrupt ...
-    retfie                  ; ... else skip service routine
-
     movwf   w_isr           ; Save off current W register contents
     swapf   STATUS,W        ; Swap status register into W register
     BANKSEL TMR0            ; Ensure register page 0 is selected
@@ -150,12 +147,36 @@ BeginISR
     movlw   high BeginISR   ; Load ISR address high byte ...
     movwf   PCLATH          ; ... into PCLATH to set code block
 
-RunTMR0
-    ; Re-enable the timer interrupt and reload the timer
-    bcf     INTCON,T0IF     ; Reset the TMR0 Interrupt bit
-    movlw   RTCCINT + 3     ; Add 3 cycles for TMR0 write increment and inhibit
-    addwf   TMR0,F          ; Reload TMR0
+    ; End Interrupt Service Routine
+    ;******************************************************************
+EndISR
+    btfsc   INTCON,TMR0IF   ; Skip if no TMR0 overflow ...
+    goto    RunTMR0         ; ... else run Timer 0 service routine
+    btfsc   PIR1,TMR2IF     ; Skip if no TMR2 overflow ...
+    goto    RunTMR2         ; ... else run Timer 2 service routine
 
+    ; Exit Interrupt Service Routine
+    ;******************************************************************
+ExitISR
+    movf    pclath_isr,W    ; Retrieve copy of PCLATH register
+    movwf   PCLATH          ; Restore pre-isr PCLATH register contents
+    movf    fsr_isr,W       ; Retrieve copy of FSR register
+    movwf   FSR             ; Restore pre-isr FSR register contents
+    swapf   status_isr,W    ; Swap copy of STATUS register into W register
+    movwf   STATUS          ; Restore pre-isr STATUS register contents
+    swapf   w_isr,F         ; Swap pre-isr W register value nibbles
+    swapf   w_isr,W         ; Swap pre-isr W register into W register
+
+    retfie                  ; return from Interrupt
+
+
+    ; Service Timer 0 interrupt
+    ;******************************************************************
+RunTMR0
+    ; Clear the timer interrupt flag and reload the timer
+    bcf     INTCON,TMR0IF   ; Reset the TMR0 Interrupt bit
+    movlw   TMR0INT + 3     ; Add 3 cycles for TMR0 write increment and inhibit
+    addwf   TMR0,F          ; Reload TMR0 period
 
     ; Service next controller link
     ;******************************************************************
@@ -165,12 +186,28 @@ RunTMR0
     ;******************************************************************
     SrvcLink  lnkPState, serPTimer, INTLNKDLYRX, INTLNKDLYTX, EnableTxP, InitTxP, SrvcTxP, TxBreakP, EnableRxP, InitRxP, SrvcRxP
 
-
     ; Run interrupt scaling counter for down scaled timing
     ;******************************************************************
     decfsz  intScCount,W    ; Decrement interrupt scaling counter into W
     movwf   intScCount      ; If result is not zero update the counter
 
+    ; Output aspect display without altering non aspect bits on port
+    ;******************************************************************
+    call    GetAspectOutput ; Get aspect output bit value into accumulator
+    iorwf   ASPPORT,F       ; Set relevant aspect output bits
+    iorlw   ~ASPOUTMSK      ; Protect non aspect output bits
+    andwf   ASPPORT,F       ; Clear relevant aspect output bits
+
+    goto    EndISR
+
+
+
+
+    ; Service Timer 2 interrupt
+    ;******************************************************************
+RunTMR2
+    ; Clear the timer interrupt flag
+    bcf     PIR1,TMR2IF     ; Reset the TMR2 Interrupt bit
 
     ; Run train detection
     ;******************************************************************
@@ -198,26 +235,7 @@ SensorEnd
     movlw   EMTMSK
     xorwf   EMTPORT,F
 
-
-    ; End Interrupt Service Routine
-    ;******************************************************************
-    btfsc   INTCON,T0IF     ; Skip if no TMR0 overflow during ISR ...
-    goto    RunTMR0         ; ... else run service routine again
-
-
-    ; Exit Interrupt Service Routine
-    ;******************************************************************
-ExitISR
-    movf    pclath_isr,W    ; Retrieve copy of PCLATH register
-    movwf   PCLATH          ; Restore pre-isr PCLATH register contents
-    movf    fsr_isr,W       ; Retrieve copy of FSR register
-    movwf   FSR             ; Restore pre-isr FSR register contents
-    swapf   status_isr,W    ; Swap copy of STATUS register into W register
-    movwf   STATUS          ; Restore pre-isr STATUS register contents
-    swapf   w_isr,F         ; Swap pre-isr W register value nibbles
-    swapf   w_isr,W         ; Swap pre-isr W register into W register
-
-    retfie                  ; return from Interrupt
+    goto    EndISR
 
 
 
@@ -315,10 +333,21 @@ ClearRAM
 
     ; Initialise interrupts
     ;******************************************************************
-    movlw   RTCCINT
-    movwf   TMR0            ; Initialise TMR0 for timer interrupts
+    movlw   TMR0INT
+    movwf   TMR0            ; Initialise TMR0 period
     clrf    INTCON          ; Disable all interrupt sources
     bsf     INTCON,T0IE     ; Enable TMR0 interrupts
+
+    movlw   TMR2INT
+    BANKSEL PR2
+    movwf   PR2             ; Set TMR2 period
+    clrf    PIE1            ; Disable all interrupt sources
+    bsf     PIE1,TMR2IE     ; Enable TMR2 interrupts
+    BANKSEL T2CON
+    clrf    T2CON           ; 1:1 pre and post scaling
+    bsf     T2CON,TMR2ON    ; Turn on TMR2
+    bsf     INTCON,PEIE     ; Enable peripheral interrupts
+
     bsf     INTCON,GIE      ; Enable interrupts
 
 
@@ -451,13 +480,9 @@ TimingEnd
     bsf     inputs,REVBIT   ; ... else line reversal not alllowed (active low)
 
 
-    ; Output aspect display without altering non aspect bits on port
+    ; Set aspect display value
     ;******************************************************************
     call    SetAspectOutput
-    call    GetAspectOutput ; Get aspect output bit value into accumulator
-    iorwf   ASPPORT,F       ; Set relevant aspect output bits
-    iorlw   ~ASPOUTMSK      ; Protect non aspect output bits
-    andwf   ASPPORT,F       ; Clear relevant aspect output bits
 
 
     ; Service link with previous controller
