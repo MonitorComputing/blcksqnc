@@ -62,13 +62,16 @@ MaxLw   macro   arg1, arg2
 
 ; Address defintions
 BootVector  EQU     0x000
-CodeEnd     EQU     0x33F
+CodeEnd     EQU     0x3FF
 EEpromStart EQU     0x2100
+EEpromEnd   EQU     0x217F
 IntVector   EQU     0x004
 RAM0_Start  EQU     0x20
 RAM0_End    EQU     0x7F
 RAM1_Start  EQU     0xA0
 RAM1_End    EQU     0xEF
+RAM2_Start  EQU     0x120
+RAM2_End    EQU     0x14F
 
 ; I/O port direction masks
 PORTASTATUS EQU     B'00100000' ; All outputs (RB4 open drain) except RB5
