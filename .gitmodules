@@ -1,4 +1,4 @@
 [submodule "utility"]
-	path = utility
+	path = utility_pic
 	url = /home/chris/github/utility_pic.git
 	branch = MonitorUtility

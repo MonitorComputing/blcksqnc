@@ -85,8 +85,8 @@ endRAM      EQU afterRAM - 1
 ; Include serial link interface macros
 ;  - Serial link bit timing is performed by link service routines
 #define CLKD_SERIAL
-#include "utility/asyn_srl.inc"
-#include "utility/link_hd.inc"
+#include "utility_pic/asyn_srl.inc"
+#include "utility_pic/link_hd.inc"
 #include "blcksqnc_cod.inc"
 
 ;**********************************************************************
