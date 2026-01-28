@@ -1,37 +1,20 @@
 ;**********************************************************************
 ;                                                                     *
-;    Description:   Controller for multiple aspect colour light       *
-;                   signal and occupation block with positional train *
-;                   detector at block exit.                           *
+; Description: Controller for multiple aspect colour light signal and *
+;              occupation block with positional train detector at     *
+;              block exit.                                            *
 ;                                                                     *
-;                   This is a generic specialisation to test common   *
-;                   code.                                             *
+;              This is a generic specialisation to test common code.  *
 ;                                                                     *
-;    Author:        Chris White                                       *
-;    Company:       Monitor Computing Services Ltd.                   *
-;                                                                     * 
+; Author: Chris White (whitecf69@gmail.com)                           *
 ;                                                                     *
-;**********************************************************************
+; Copyright (C) 2018 by Monitor Computing Services Limited, licensed  *
+; under CC BY-NC-SA 4.0. To view a copy of this license, visit        *
+; https://creativecommons.org/licenses/by-nc-sa/4.0/                  *
 ;                                                                     *
-;    Copyright (C) 2018  Monitor Computing Services Ltd.              *
-;                                                                     *
-;    This program is free software; you can redistribute it and/or    *
-;    modify it under the terms of the GNU General Public License      *
-;    as published by the Free Software Foundation; either version 2   *
-;    of the License, or any later version.                            *
-;                                                                     *
-;    This program is distributed in the hope that it will be useful,  *
-;    but WITHOUT ANY WARRANTY; without even the implied warranty of   *
-;    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the    *
-;    GNU General Public License for more details.                     *
-;                                                                     *
-;    You should have received a copy of the GNU General Public        *
-;    License (http://www.gnu.org/copyleft/gpl.html) along with this   *
-;    program; if not, write to:                                       *
-;       The Free Software Foundation Inc.,                            *
-;       59 Temple Place - Suite 330,                                  *
-;       Boston, MA  02111-1307,                                       *
-;       USA.                                                          *
+; This program is distributed in the hope that it will be useful, but *
+; WITHOUT ANY WARRANTY; without even the implied warranty of          *
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.                *
 ;                                                                     *
 ;**********************************************************************
 ;                                                                     *
@@ -54,7 +37,7 @@
 ; Configuration directives and constant definitions
 ;**********************************************************************
 #include "blcksqnc_def.inc"
- 
+
 ; Aspect output constants
 STPMSK      EQU     B'00000001' ; Mask for stop aspect output bit
 WR1MSK      EQU     B'00000010' ; Mask for warning 1 aspect output bit
@@ -62,7 +45,7 @@ WR2MSK      EQU     B'00000100' ; Mask for warning 2 aspect output bit
 CLRMSK      EQU     B'00001000' ; Mask for clear aspect output bit
 BLANKMSK    EQU     B'00000000' ; Mask for blank aspect output
 
- 
+
 ;**********************************************************************
 ; Variable registers
 ;**********************************************************************
@@ -104,7 +87,7 @@ GetAspectOutput
 
     movlw   HALFSEC
     andwf   secCount,W      ; Test for flashing aspect blanking period
-    
+
     movlw   WR2MSK
     btfss   aspVal,ASPW2FLG
     movlw   WR1MSK
